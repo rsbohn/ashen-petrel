@@ -18,14 +18,29 @@ namespace Ashen
             Reset();
         }
 
-        public int Pc { get; private set; }
+        public int Pc { get; internal set; }
+        public int Sp { get; internal set; }
         public bool Halted { get; private set; }
 
         public void Reset(int address = 0)
         {
             Pc = address & 0x7fff;
+            Sp = _memory.Size - 1;
             Halted = false;
         }
+
+        public void Push(ushort value)
+        {
+            _memory.Write(Sp, value);
+            Sp--;
+        }
+
+        public ushort Pop()
+        {
+            Sp++;
+            return _memory.Read(Sp);
+        }
+
 
         public bool Step()
         {

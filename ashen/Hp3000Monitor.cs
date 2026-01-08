@@ -311,7 +311,7 @@ namespace Ashen
 
         private void ShowRegs()
         {
-            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_stack.Count}");
+            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SP={ToOctal(_cpu.Sp)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_stack.Count}");
         }
 
         private void Disassemble(TokenStream stream)
@@ -326,7 +326,10 @@ namespace Ashen
             for (var i = 0; i < count; i++)
             {
                 var opcode = _memory.Read(address + i);
-                Console.WriteLine($"{ToOctal(address + i)}: {_isa.Disassemble(opcode)}");
+                var mnemonic = _isa.Disassemble(opcode);
+                var line = $"{ToOctal(address + i)}: {mnemonic}";
+
+                Console.WriteLine(line);
             }
         }
 
@@ -346,7 +349,9 @@ namespace Ashen
             }
 
             _memory.Write(address, opcode);
-            Console.WriteLine($"{token} -> {ToOctal(address)}");
+            var line = $"{token} -> {ToOctal(address)}";
+
+            Console.WriteLine(line);
         }
 
         private void SetBreak(TokenStream stream)
