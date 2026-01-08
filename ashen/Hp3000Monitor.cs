@@ -11,7 +11,6 @@ namespace Ashen
         private readonly Hp3000Memory _memory;
         private readonly DeviceRegistry _devices;
         private readonly Hp3000Isa _isa;
-        private readonly Stack<int> _stack = new();
         private readonly HashSet<int> _breakpoints = new();
         private readonly Dictionary<string, Action<TokenStream>> _words;
         private bool _quit;
@@ -57,7 +56,7 @@ namespace Ashen
                 var token = stream.Next();
                 if (TryParseNumber(token, out var value))
                 {
-                    _stack.Push(value);
+                    _cpu.Push((ushort)value);
                     continue;
                 }
 
@@ -85,6 +84,7 @@ namespace Ashen
                 ["help"] = _ => ShowHelp(),
                 ["words"] = _ => ListWords(),
                 ["quit"] = _ => _quit = true,
+                ["q"] = _ => _quit = true,
                 ["exit"] = _ => _quit = true,
                 ["."] = _ => PrintTop(),
                 ["dup"] = _ => Dup(),
@@ -103,6 +103,8 @@ namespace Ashen
                 ["go"] = Go,
                 ["run"] = RunCpu,
                 ["step"] = StepCpu,
+                ["trace"] = TraceCpu,
+                ["t"] = TraceCpu,
                 ["regs"] = _ => ShowRegs(),
                 ["exam"] = ExamMemory,
                 ["x"] = ExamMemory,
@@ -139,73 +141,74 @@ namespace Ashen
 
         private void PrintTop()
         {
-            if (_stack.Count == 0)
+            if (_cpu.Sr == 0)
             {
                 Console.WriteLine("stack empty");
                 return;
             }
 
-            Console.WriteLine(ToOctal(_stack.Peek()));
+            Console.WriteLine(ToOctal(_cpu.Pop()));
         }
 
         private void Dup()
         {
             RequireStack(1);
-            _stack.Push(_stack.Peek());
+            _cpu.Push(_cpu.Peek());
         }
 
         private void Drop()
         {
             RequireStack(1);
-            _stack.Pop();
+            _cpu.Pop();
         }
 
         private void Swap()
         {
             RequireStack(2);
-            var a = _stack.Pop();
-            var b = _stack.Pop();
-            _stack.Push(a);
-            _stack.Push(b);
+            var a = _cpu.Pop();
+            var b = _cpu.Pop();
+            _cpu.Push(a);
+            _cpu.Push(b);
         }
 
         private void Over()
         {
             RequireStack(2);
-            var a = _stack.Pop();
-            var b = _stack.Peek();
-            _stack.Push(a);
-            _stack.Push(b);
+            var a = _cpu.Pop();
+            var b = _cpu.Pop();
+            _cpu.Push(b);
+            _cpu.Push(a);
+            _cpu.Push(b);
         }
 
         private void BinOp(Func<int, int, int> op)
         {
             RequireStack(2);
-            var b = _stack.Pop();
-            var a = _stack.Pop();
-            _stack.Push(op(a, b));
+            var b = _cpu.Pop();
+            var a = _cpu.Pop();
+            _cpu.Push((ushort)op(a, b));
         }
 
         private void UnaryOp(Func<int, int> op)
         {
             RequireStack(1);
-            var a = _stack.Pop();
-            _stack.Push(op(a));
+            var a = _cpu.Pop();
+            _cpu.Push((ushort)op(a));
         }
 
         private void StoreWord()
         {
             RequireStack(2);
-            var address = _stack.Pop();
-            var value = _stack.Pop();
+            var address = _cpu.Pop();
+            var value = _cpu.Pop();
             _memory.Write(address, (ushort)value);
         }
 
         private void FetchWord()
         {
             RequireStack(1);
-            var address = _stack.Pop();
-            _stack.Push(_memory.Read(address));
+            var address = _cpu.Pop();
+            _cpu.Push(_memory.Read(address));
         }
 
         private void Reset(TokenStream stream)
@@ -233,6 +236,7 @@ namespace Ashen
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
             var ran = _cpu.Run(maxSteps);
             Console.WriteLine($"ran {ran} steps");
+            ReportHaltReason();
         }
 
         private void RunCpu(TokenStream stream)
@@ -240,6 +244,7 @@ namespace Ashen
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
             var ran = _cpu.Run(maxSteps);
             Console.WriteLine($"ran {ran} steps");
+            ReportHaltReason();
         }
 
         private void StepCpu(TokenStream stream)
@@ -257,6 +262,27 @@ namespace Ashen
             }
 
             Console.WriteLine($"stepped {ran} steps");
+            ReportHaltReason();
+        }
+
+        private void TraceCpu(TokenStream stream)
+        {
+            var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1;
+            var ran = 0;
+            for (var i = 0; i < steps; i++)
+            {
+                var stepped = _cpu.Step();
+                ShowRegs();
+                ReportHaltReason();
+                if (!stepped)
+                {
+                    break;
+                }
+
+                ran++;
+            }
+
+            Console.WriteLine($"traced {ran} steps");
         }
 
         private void ExamMemory(TokenStream stream)
@@ -311,7 +337,15 @@ namespace Ashen
 
         private void ShowRegs()
         {
-            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SP={ToOctal(_cpu.Sp)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_stack.Count}");
+            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SP={ToOctal(_cpu.Sp)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} RA={ToOctal(_cpu.Ra)} RB={ToOctal(_cpu.Rb)} RC={ToOctal(_cpu.Rc)} RD={ToOctal(_cpu.Rd)} X={ToOctal(_cpu.X)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_cpu.Sr}");
+        }
+
+        private void ReportHaltReason()
+        {
+            if (_cpu.Halted && !string.IsNullOrWhiteSpace(_cpu.HaltReason))
+            {
+                Console.WriteLine($"halt: {_cpu.HaltReason}");
+            }
         }
 
         private void Disassemble(TokenStream stream)
@@ -327,7 +361,7 @@ namespace Ashen
             {
                 var opcode = _memory.Read(address + i);
                 var mnemonic = _isa.Disassemble(opcode);
-                var line = $"{ToOctal(address + i)}: {mnemonic}";
+                var line = $"{ToOctal(address + i)}: {ToOctal(opcode)} {mnemonic}";
 
                 Console.WriteLine(line);
             }
@@ -342,6 +376,27 @@ namespace Ashen
             }
 
             var address = stream.TryNextNumber(out var addr) ? addr : _cpu.Pc;
+            if (token.Equals("BR", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!stream.TryNext(out var operand))
+                {
+                    Console.WriteLine("asm BR <operand> [addr]");
+                    return;
+                }
+
+                if (!_isa.TryAssemble(token, operand, out var branchOpcode))
+                {
+                    Console.WriteLine($"unknown mnemonic {token} {operand}");
+                    return;
+                }
+
+                _memory.Write(address, branchOpcode);
+                var branchLine = $"{token} {operand} -> {ToOctal(address)}";
+
+                Console.WriteLine(branchLine);
+                return;
+            }
+
             if (!_isa.TryAssemble(token, out var opcode))
             {
                 Console.WriteLine($"unknown mnemonic {token}");
@@ -349,9 +404,9 @@ namespace Ashen
             }
 
             _memory.Write(address, opcode);
-            var line = $"{token} -> {ToOctal(address)}";
+            var assembledLine = $"{token} -> {ToOctal(address)}";
 
-            Console.WriteLine(line);
+            Console.WriteLine(assembledLine);
         }
 
         private void SetBreak(TokenStream stream)
@@ -490,7 +545,7 @@ namespace Ashen
 
         private void RequireStack(int count)
         {
-            if (_stack.Count < count)
+            if (_cpu.Sr < count)
             {
                 throw new InvalidOperationException("stack underflow");
             }

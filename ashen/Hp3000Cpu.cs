@@ -20,25 +20,82 @@ namespace Ashen
 
         public int Pc { get; internal set; }
         public int Sp { get; internal set; }
+        public int Sm { get; internal set; }
+        public int Sr { get; internal set; }
+        public ushort Ra { get; internal set; }
+        public ushort Rb { get; internal set; }
+        public ushort Rc { get; internal set; }
+        public ushort Rd { get; internal set; }
+        public ushort X { get; internal set; }
         public bool Halted { get; private set; }
+        public string? HaltReason { get; private set; }
 
         public void Reset(int address = 0)
         {
             Pc = address & 0x7fff;
             Sp = _memory.Size - 1;
+            Sm = 0x1000;
+            Sr = 0;
+            Ra = 0;
+            Rb = 0;
+            Rc = 0;
+            Rd = 0;
+            X = 0;
             Halted = false;
+            HaltReason = null;
         }
 
         public void Push(ushort value)
         {
-            _memory.Write(Sp, value);
-            Sp--;
+            if (Halted)
+            {
+                return;
+            }
+
+            if (Sr == 4)
+            {
+                Sm = (Sm - 1) & 0x7fff;
+                _memory.Write(Sm, Rd);
+            }
+
+            Rd = Rc;
+            Rc = Rb;
+            Rb = Ra;
+            Ra = value;
+            if (Sr < 4)
+            {
+                Sr++;
+            }
         }
 
         public ushort Pop()
         {
-            Sp++;
-            return _memory.Read(Sp);
+            if (Halted)
+            {
+                return 0;
+            }
+
+            if (Sr == 0)
+            {
+                HaltWithError("stack underflow");
+                return 0;
+            }
+
+            var value = Ra;
+            Ra = Rb;
+            Rb = Rc;
+            Rc = Rd;
+            if (Sr == 4)
+            {
+                Rd = _memory.Read(Sm);
+                Sm = (Sm + 1) & 0x7fff;
+            }
+            else
+            {
+                Rd = 0;
+            }
+            Sr--;
+            return value;
         }
 
 
@@ -49,16 +106,35 @@ namespace Ashen
                 return false;
             }
 
-            var opcode = _memory.Read(Pc);
+            var word = _memory.Read(Pc);
             Pc = (Pc + 1) & 0x7fff;
 
-            if (_isa.TryExecute(opcode, this))
+            if (_isa.TryExecuteWord(word, this))
             {
                 return !Halted;
             }
 
-            Halted = true;
-            return false;
+            var firstOpcode = (ushort)(word & 0x003f);
+            var secondOpcode = (ushort)((word >> 6) & 0x003f);
+
+            if (!_isa.TryExecute(firstOpcode, this))
+            {
+                HaltWithError($"unknown opcode {ToOctal(firstOpcode)}");
+                return false;
+            }
+
+            if (Halted)
+            {
+                return false;
+            }
+
+            if (!_isa.TryExecute(secondOpcode, this))
+            {
+                HaltWithError($"unknown opcode {ToOctal(secondOpcode)}");
+                return false;
+            }
+
+            return !Halted;
         }
 
         public int Run(int maxSteps)
@@ -90,6 +166,49 @@ namespace Ashen
         public void WriteWord(int address, ushort value)
         {
             _memory.Write(address, value);
+        }
+
+        public ushort Peek()
+        {
+            if (Halted)
+            {
+                return 0;
+            }
+
+            if (Sr == 0)
+            {
+                HaltWithError("stack underflow");
+                return 0;
+            }
+
+            return Ra;
+        }
+
+        public void ReplaceTop(ushort value)
+        {
+            if (Halted)
+            {
+                return;
+            }
+
+            if (Sr == 0)
+            {
+                HaltWithError("stack underflow");
+                return;
+            }
+
+            Ra = value;
+        }
+
+        private void HaltWithError(string message)
+        {
+            Halted = true;
+            HaltReason = message;
+        }
+
+        private static string ToOctal(ushort value)
+        {
+            return Convert.ToString(value, 8).PadLeft(3, '0');
         }
     }
 }
