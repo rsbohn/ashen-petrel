@@ -130,6 +130,18 @@ namespace Ashen
                         cpu.Pop();
                         return true;
                     }
+                case 0x0023: // STAX
+                    {
+                        var value = cpu.Pop();
+                        cpu.WriteWord(cpu.X, value);
+                        return true;
+                    }
+                case 0x0024: // LDXA
+                    {
+                        var value = cpu.Pop();
+                        cpu.X = value;
+                        return true;
+                    }
                 case 0x0025: // DUP
                     {
                         var value = cpu.Pop();

@@ -2,46 +2,89 @@
 
 This document details the implemented instruction set for the Ashen Petrel HP 3000 emulator.
 
-## Implemented Instructions
+## Instruction Format
+
+The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6-bit opcodes per word, executed sequentially.
+
+## Fully Implemented Instructions
 
 | Mnemonic | Opcode | Description |
 |----------|--------|-------------|
 | `NOP` | 000000 | No operation. Does nothing. |
-| `DELB` | 000001 | Delete B. This is a placeholder and does not affect the stack. |
-| `DUP` | 000002 | Duplicate the top of the stack. |
-| `DEL` | 000003 | Delete the top of the stack. |
-| `ZERO` | 000004 | Push a zero onto the stack. |
+| `DELB` | 000001 | Delete B. Placeholder, no stack effect. |
+| `DDEL` | 000002 | Double delete. Pops two values from stack. |
+| `ZERO` | 000006 | Push a zero onto the stack. |
+| `DZRO` | 000007 | Push two zeros onto the stack. |
+| `ADD` | 000020 | Add: b + a → result. |
+| `SUB` | 000021 | Subtract: b - a → result. |
+| `MPY` | 000022 | Multiply: b * a → result. |
+| `DIV` | 000023 | Divide: b / a → result (zero if a=0). |
+| `NEG` | 000024 | Negate top of stack. |
+| `XCH` | 000032 | Exchange top two stack items. |
+| `INCA` | 000033 | Increment A (top of stack). |
+| `DECA` | 000034 | Decrement A (top of stack). |
+| `DEL` | 000040 | Delete top of stack. |
+| `DUP` | 000045 | Duplicate top of stack. |
+| `DDUP` | 000046 | Duplicate top two stack items. |
+| `NOT` | 000064 | Bitwise NOT of top of stack. |
+| `OR` | 000065 | Bitwise OR: b \| a → result. |
+| `XOR` | 000066 | Bitwise XOR: b ^ a → result. |
+| `AND` | 000067 | Bitwise AND: b & a → result. |
 
-## Format 2 Opcodes
+## Branch Instructions
+
+Branch instructions use a different format with opcode base `0xC000` (octal 140000).
+
+**Syntax:** `BR P±offset[,I][,X]`
+
+- **P±offset**: Program counter relative offset (octal, 0-377)
+  - `P+offset`: Branch forward
+  - `P-offset`: Branch backward
+- **,I**: Indirect addressing (use memory value as target)
+- **,X**: Indexed addressing (add X register to target)
+
+**Examples:**
+- `BR P+10` - Branch forward 8 (decimal) locations
+- `BR P-5,X` - Branch backward 5 (octal), indexed by X
+- `BR P+100,I` - Branch forward to address in memory
+
+## Complete Format 2 Opcode Table
 
 Format 2 opcodes are listed below as octal values from `000` to `077`. They are
 packed two per word, and `step` executes them sequentially (first opcode, then
-the second opcode).
+the second opcode). **Bold** opcodes are fully implemented.
 
-000 = NOP     033 = INCA    066 = XOR
-001 = DELB    034 = DECA    067 = AND
-002 = DDEL    035 = XAX     070 = FIXR
-003 = ZROX    036 = ADAX    071 = FIXT
-004 = INCX    037 = ADXA    072 = ??? (unknown)
-005 = DECX    040 = DEL     073 = INCB
-006 = ZERO    041 = ZROB    074 = DECB
-007 = DZRO    042 = LDXB    075 = XBX
-010 = DCMP    043 = STAX    076 = ADBX
-011 = DADD    044 = LDXA    077 = ADXB
-012 = DSUB    045 = DUP     
-013 = MPYL    046 = DDUP    
-014 = DIVL    047 = FLT     
-015 = DNEG    050 = FCMP    
-016 = DXCH    051 = FADD    
-017 = CMP     052 = FSUB    
-020 = ADD     053 = FMPY    
-021 = SUB     054 = FDIV    
-022 = MPY     055 = FNEG    
-023 = DIV     056 = CAB     
-024 = NEG     057 = LCMP    
-025 = TEST    060 = LADD (Logical add)
-026 = STBX    061 = LSUB    
-027 = DTST    062 = LMPY    
-030 = DFLT    063 = LDIV    
-031 = BTST    064 = NOT     
-032 = XCH     065 = OR
+| Octal | Mnemonic | Status | Octal | Mnemonic | Status |
+|-------|----------|--------|-------|----------|--------|
+| 000 | **NOP** | ✓ | 040 | **DEL** | ✓ |
+| 001 | **DELB** | ✓ | 041 | ZROB | - |
+| 002 | **DDEL** | ✓ | 042 | LDXB | - |
+| 003 | ZROX | - | 043 | STAX | - |
+| 004 | INCX | - | 044 | LDXA | - |
+| 005 | DECX | - | 045 | **DUP** | ✓ |
+| 006 | **ZERO** | ✓ | 046 | **DDUP** | ✓ |
+| 007 | **DZRO** | ✓ | 047 | FLT | - |
+| 010 | DCMP | - | 050 | FCMP | - |
+| 011 | DADD | - | 051 | FADD | - |
+| 012 | DSUB | - | 052 | FSUB | - |
+| 013 | MPYL | - | 053 | FMPY | - |
+| 014 | DIVL | - | 054 | FDIV | - |
+| 015 | DNEG | - | 055 | FNEG | - |
+| 016 | DXCH | - | 056 | CAB | - |
+| 017 | CMP | - | 057 | LCMP | - |
+| 020 | **ADD** | ✓ | 060 | LADD | - |
+| 021 | **SUB** | ✓ | 061 | LSUB | - |
+| 022 | **MPY** | ✓ | 062 | LMPY | - |
+| 023 | **DIV** | ✓ | 063 | LDIV | - |
+| 024 | **NEG** | ✓ | 064 | **NOT** | ✓ |
+| 025 | TEST | - | 065 | **OR** | ✓ |
+| 026 | STBX | - | 066 | **XOR** | ✓ |
+| 027 | DTST | - | 067 | **AND** | ✓ |
+| 030 | DFLT | - | 070 | FIXR | - |
+| 031 | BTST | - | 071 | FIXT | - |
+| 032 | **XCH** | ✓ | 072 | UNK | - |
+| 033 | **INCA** | ✓ | 073 | INCB | - |
+| 034 | **DECA** | ✓ | 074 | DECB | - |
+| 035 | XAX | - | 075 | XBX | - |
+| 036 | ADAX | - | 076 | ADBX | - |
+| 037 | ADXA | - | 077 | ADXB | - |
