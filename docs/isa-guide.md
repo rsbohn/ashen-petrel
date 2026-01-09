@@ -54,6 +54,20 @@ Format 2 opcodes are listed below as octal values from `000` to `077`. They are
 packed two per word, and `step` executes them sequentially (first opcode, then
 the second opcode). **Bold** opcodes are fully implemented.
 
+## Register Notes
+
+The HP 3000 CPU register set includes:
+
+- `P` (Program Counter) - current instruction address.
+- `DL/DB` (Data Base) - start of data/global area.
+- `S` (Stack Pointer) - top of the current stack.
+- `Q` (Stack Marker) - current procedure local variables.
+- `X` (Index Register) - array indexing and offsets.
+- `STATUS` - CPU state and condition codes.
+
+Ashen currently models `P`, `S`, and `X`, plus the register stack (RA/RB/RC/RD)
+and `SM`. `DL/DB`, `Q`, and `STATUS` are noted here for future implementation.
+
 | Octal | Mnemonic | Status | Octal | Mnemonic | Status |
 |-------|----------|--------|-------|----------|--------|
 | 000 | **NOP** | ✓ | 040 | **DEL** | ✓ |

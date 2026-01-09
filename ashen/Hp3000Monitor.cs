@@ -337,7 +337,7 @@ namespace Ashen
 
         private void ShowRegs()
         {
-            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SP={ToOctal(_cpu.Sp)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} RA={ToOctal(_cpu.Ra)} RB={ToOctal(_cpu.Rb)} RC={ToOctal(_cpu.Rc)} RD={ToOctal(_cpu.Rd)} X={ToOctal(_cpu.X)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_cpu.Sr}");
+            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SP={ToOctal(_cpu.Sp)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} RA={ToOctal(_cpu.Ra)} RB={ToOctal(_cpu.Rb)} RC={ToOctal(_cpu.Rc)} RD={ToOctal(_cpu.Rd)} X={ToOctal(_cpu.X)} DB={ToOctal(_cpu.Db)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_cpu.Sr}");
         }
 
         private void ReportHaltReason()
@@ -375,36 +375,41 @@ namespace Ashen
                 return;
             }
 
-            var address = stream.TryNextNumber(out var addr) ? addr : _cpu.Pc;
-            if (token.Equals("BR", StringComparison.OrdinalIgnoreCase))
+            if (token.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("LDI", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("STOR", StringComparison.OrdinalIgnoreCase))
             {
                 if (!stream.TryNext(out var operand))
                 {
-                    Console.WriteLine("asm BR <operand> [addr]");
+                    Console.WriteLine($"asm {token} <operand> [addr]");
                     return;
                 }
 
-                if (!_isa.TryAssemble(token, operand, out var branchOpcode))
+                var operandAddress = stream.TryNextNumber(out var addr) ? addr : _cpu.Pc;
+                if (!_isa.TryAssemble(token, operand, out var opcodeWithOperand))
                 {
                     Console.WriteLine($"unknown mnemonic {token} {operand}");
                     return;
                 }
 
-                _memory.Write(address, branchOpcode);
-                var branchLine = $"{token} {operand} -> {ToOctal(address)}";
+                _memory.Write(operandAddress, opcodeWithOperand);
+                var operandLine = $"{token} {operand} -> {ToOctal(operandAddress)}";
 
-                Console.WriteLine(branchLine);
+                Console.WriteLine(operandLine);
                 return;
             }
 
+            var simpleAddress = stream.TryNextNumber(out var addrSimple) ? addrSimple : _cpu.Pc;
             if (!_isa.TryAssemble(token, out var opcode))
             {
                 Console.WriteLine($"unknown mnemonic {token}");
                 return;
             }
 
-            _memory.Write(address, opcode);
-            var assembledLine = $"{token} -> {ToOctal(address)}";
+            _memory.Write(simpleAddress, opcode);
+            var assembledLine = $"{token} -> {ToOctal(simpleAddress)}";
 
             Console.WriteLine(assembledLine);
         }

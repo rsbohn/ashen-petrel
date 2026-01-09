@@ -27,6 +27,7 @@ namespace Ashen
         public ushort Rc { get; internal set; }
         public ushort Rd { get; internal set; }
         public ushort X { get; internal set; }
+        public ushort Db { get; internal set; }
         public bool Halted { get; private set; }
         public string? HaltReason { get; private set; }
 
@@ -41,6 +42,7 @@ namespace Ashen
             Rc = 0;
             Rd = 0;
             X = 0;
+            Db = 0;
             Halted = false;
             HaltReason = null;
         }
@@ -168,6 +170,12 @@ namespace Ashen
             _memory.Write(address, value);
         }
 
+        public void Halt(string? message = null)
+        {
+            Halted = true;
+            HaltReason = message;
+        }
+
         public ushort Peek()
         {
             if (Halted)
@@ -182,6 +190,22 @@ namespace Ashen
             }
 
             return Ra;
+        }
+
+        public ushort PeekSecond()
+        {
+            if (Halted)
+            {
+                return 0;
+            }
+
+            if (Sr < 2)
+            {
+                HaltWithError("stack underflow");
+                return 0;
+            }
+
+            return Rb;
         }
 
         public void ReplaceTop(ushort value)
@@ -200,10 +224,25 @@ namespace Ashen
             Ra = value;
         }
 
+        public void ReplaceSecond(ushort value)
+        {
+            if (Halted)
+            {
+                return;
+            }
+
+            if (Sr < 2)
+            {
+                HaltWithError("stack underflow");
+                return;
+            }
+
+            Rb = value;
+        }
+
         private void HaltWithError(string message)
         {
-            Halted = true;
-            HaltReason = message;
+            Halt(message);
         }
 
         private static string ToOctal(ushort value)
