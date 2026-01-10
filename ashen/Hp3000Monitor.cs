@@ -236,7 +236,7 @@ namespace Ashen
             _cpu.Reset(address);
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
             var ran = _cpu.Run(steps);
-            Console.WriteLine($"ran {ran} steps");
+            Console.WriteLine($"ran {ToOctalCount(ran)} steps");
             ReportHaltReason();
         }
 
@@ -244,7 +244,7 @@ namespace Ashen
         {
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
             var ran = _cpu.Run(steps);
-            Console.WriteLine($"ran {ran} steps");
+            Console.WriteLine($"ran {ToOctalCount(ran)} steps");
             ReportHaltReason();
         }
 
@@ -262,7 +262,7 @@ namespace Ashen
                 ran++;
             }
 
-            Console.WriteLine($"stepped {ran} steps");
+            Console.WriteLine($"stepped {ToOctalCount(ran)} steps");
             ReportHaltReason();
         }
 
@@ -283,7 +283,7 @@ namespace Ashen
                 ran++;
             }
 
-            Console.WriteLine($"traced {ran} steps");
+            Console.WriteLine($"traced {ToOctalCount(ran)} steps");
         }
 
         private void ExamMemory(TokenStream stream)
@@ -426,8 +426,11 @@ namespace Ashen
 
         private void AssembleFile(string path)
         {
+            var symbols = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var lines = new List<AsmLine>();
             var address = _cpu.Pc;
-            var assembled = 0;
+            var origin = _cpu.Pc;
+            var originSet = false;
             var lineNumber = 0;
 
             foreach (var rawLine in File.ReadLines(path))
@@ -439,14 +442,21 @@ namespace Ashen
                     continue;
                 }
 
-                var colonIndex = line.IndexOf(':');
-                if (colonIndex >= 0)
+                var label = ExtractLabel(ref line);
+                if (!string.IsNullOrWhiteSpace(label))
                 {
-                    line = line[(colonIndex + 1)..].Trim();
-                    if (string.IsNullOrWhiteSpace(line))
+                    if (symbols.ContainsKey(label))
                     {
-                        continue;
+                        Console.WriteLine($"asm {path}:{lineNumber}: duplicate label '{label}'");
+                        return;
                     }
+
+                    symbols[label] = address & 0x7fff;
+                }
+
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
                 }
 
                 var parts = line.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
@@ -462,71 +472,417 @@ namespace Ashen
                 {
                     if (operand == null || !TryParseNumber(operand, out var org))
                     {
-                        Console.WriteLine($"asm {path}:{lineNumber}: invalid ORG");
+                        Console.WriteLine($"asm {path}:{lineNumber}: invalid ORG operand '{operand ?? ""}'");
                         return;
                     }
 
                     address = org & 0x7fff;
+                    if (!originSet)
+                    {
+                        origin = address;
+                        originSet = true;
+                    }
                     continue;
                 }
+
+                if (mnemonic.Equals("DW", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (operand == null)
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: DW requires at least one value");
+                        return;
+                    }
+
+                    var values = SplitOperands(operand);
+                    lines.Add(new AsmLine(lineNumber, address, "DW", values, line));
+                    address = (address + values.Count) & 0x7fff;
+                    continue;
+                }
+
+                lines.Add(new AsmLine(lineNumber, address, mnemonic, operand, line));
+                address = (address + 1) & 0x7fff;
+            }
+
+            var assembled = 0;
+            foreach (var asmLine in lines)
+            {
+                if (asmLine.Mnemonic.Equals("DW", StringComparison.OrdinalIgnoreCase))
+                {
+                    var writeAddress = asmLine.Address;
+                    foreach (var valueToken in asmLine.Values)
+                    {
+                        if (!TryResolveValue(valueToken, symbols, writeAddress, out var value))
+                        {
+                            Console.WriteLine($"asm {path}:{asmLine.LineNumber}: invalid literal '{valueToken}'");
+                            return;
+                        }
+
+                        _memory.Write(writeAddress, (ushort)value);
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        assembled++;
+                    }
+
+                    continue;
+                }
+
+                var mnemonic = asmLine.Mnemonic;
+                var operand = asmLine.Operand;
 
                 if (mnemonic.EndsWith(",", StringComparison.Ordinal))
                 {
                     var firstMnemonic = mnemonic.TrimEnd(',');
                     if (string.IsNullOrWhiteSpace(operand))
                     {
-                        Console.WriteLine($"asm {path}:{lineNumber}: missing second opcode");
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: missing second opcode");
                         return;
                     }
 
                     var secondParts = operand.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
                     if (secondParts.Length != 1)
                     {
-                        Console.WriteLine($"asm {path}:{lineNumber}: invalid packed opcodes");
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: invalid packed opcodes '{asmLine.RawLine}'");
                         return;
                     }
 
                     if (!_isa.TryAssemble(firstMnemonic, out var firstOpcode)
                         || !_isa.TryAssemble(secondParts[0], out var secondOpcode))
                     {
-                        Console.WriteLine($"asm {path}:{lineNumber}: unknown mnemonic");
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: unknown mnemonic in '{asmLine.RawLine}'");
                         return;
                     }
 
                     var packed = (ushort)((secondOpcode << 6) | firstOpcode);
-                    _memory.Write(address, packed);
-                    address = (address + 1) & 0x7fff;
+                    _memory.Write(asmLine.Address, packed);
                     assembled++;
                     continue;
                 }
 
-                if (operand != null && _isa.TryAssemble(mnemonic, operand, out var opcodeWithOperand))
+                if (operand != null)
                 {
-                    _memory.Write(address, opcodeWithOperand);
-                    address = (address + 1) & 0x7fff;
-                    assembled++;
-                    continue;
+                    if (!TryResolveOperand(mnemonic, operand, asmLine.Address, symbols, out var resolvedOperand, out var error))
+                    {
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: {error}");
+                        return;
+                    }
+
+                    if (_isa.TryAssemble(mnemonic, resolvedOperand, out var opcodeWithOperand))
+                    {
+                        _memory.Write(asmLine.Address, opcodeWithOperand);
+                        assembled++;
+                        continue;
+                    }
+
+                    if (IsOperandMnemonic(mnemonic))
+                    {
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: invalid operand '{operand}' for {mnemonic}");
+                        return;
+                    }
                 }
 
                 if (_isa.TryAssemble(mnemonic, out var opcode))
                 {
-                    _memory.Write(address, opcode);
-                    address = (address + 1) & 0x7fff;
+                    _memory.Write(asmLine.Address, opcode);
                     assembled++;
                     continue;
                 }
 
-                Console.WriteLine($"asm {path}:{lineNumber}: unknown mnemonic {mnemonic}");
+                Console.WriteLine($"asm {path}:{asmLine.LineNumber}: unknown mnemonic '{mnemonic}'");
                 return;
             }
 
-            Console.WriteLine($"assembled {assembled} words");
+            Console.WriteLine($"assembled {ToOctal(assembled)} words ORG={ToOctal(origin)}");
         }
 
         private static string StripComment(string line)
         {
             var index = line.IndexOf(';');
             return index >= 0 ? line[..index] : line;
+        }
+
+        private static string ToOctalCount(int value)
+        {
+            return "0" + Convert.ToString(value, 8);
+        }
+
+        private static string ExtractLabel(ref string line)
+        {
+            var colonIndex = line.IndexOf(':');
+            if (colonIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            var label = line[..colonIndex].Trim();
+            line = line[(colonIndex + 1)..].Trim();
+            return label;
+        }
+
+        private static List<string> SplitOperands(string operand)
+        {
+            var tokens = new List<string>();
+            var parts = operand.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                var trimmed = part.Trim();
+                if (trimmed.Length == 0)
+                {
+                    continue;
+                }
+
+                var inner = trimmed.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                tokens.AddRange(inner);
+            }
+
+            return tokens;
+        }
+
+        private static bool TryResolveOperand(
+            string mnemonic,
+            string operand,
+            int address,
+            Dictionary<string, int> symbols,
+            out string resolved,
+            out string error)
+        {
+            resolved = string.Empty;
+            error = string.Empty;
+
+            var parts = operand.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                error = $"invalid operand '{operand}'";
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            var suffix = string.Empty;
+            if (parts.Length > 1)
+            {
+                suffix = "," + string.Join(",", parts.Skip(1)).Trim();
+            }
+
+            if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryResolveLoadBase(basePart, address, symbols, out var loadBase, out error))
+                {
+                    return false;
+                }
+
+                resolved = loadBase + suffix;
+                return true;
+            }
+
+            if (!TryResolveBase(basePart, address, symbols, out var baseResolved, out error))
+            {
+                return false;
+            }
+
+            resolved = baseResolved + suffix;
+            return true;
+        }
+
+        private static bool TryResolveLoadBase(
+            string basePart,
+            int address,
+            Dictionary<string, int> symbols,
+            out string resolved,
+            out string error)
+        {
+            resolved = string.Empty;
+            error = string.Empty;
+
+            if (TryParseNumber(basePart, out _))
+            {
+                resolved = basePart;
+                return true;
+            }
+
+            if (basePart.StartsWith("P", StringComparison.OrdinalIgnoreCase))
+            {
+                resolved = basePart;
+                return true;
+            }
+
+            if (TryResolveSymbolOrDot(basePart, address, symbols, out var target))
+            {
+                var displacement = target - address;
+                var direction = displacement < 0 ? '-' : '+';
+                var magnitude = Math.Abs(displacement);
+                resolved = $"P{direction}{Convert.ToString(magnitude, 8)}";
+                return true;
+            }
+
+            error = $"unknown label '{basePart}'";
+            return false;
+        }
+
+        private static bool TryResolveBase(
+            string basePart,
+            int address,
+            Dictionary<string, int> symbols,
+            out string resolved,
+            out string error)
+        {
+            resolved = string.Empty;
+            error = string.Empty;
+
+            if (TryParseNumber(basePart, out _))
+            {
+                resolved = basePart;
+                return true;
+            }
+
+            if (basePart.StartsWith("P", StringComparison.OrdinalIgnoreCase))
+            {
+                resolved = basePart;
+                return true;
+            }
+
+            if (basePart.StartsWith(".", StringComparison.Ordinal))
+            {
+                if (TryResolveDotRelative(basePart, out resolved))
+                {
+                    return true;
+                }
+            }
+
+            if (TryResolveSymbolOrDot(basePart, address, symbols, out var value))
+            {
+                resolved = Convert.ToString(value, 8);
+                return true;
+            }
+
+            var plusIndex = basePart.IndexOf('+');
+            if (plusIndex > 0 && plusIndex < basePart.Length - 1)
+            {
+                var prefix = basePart[..(plusIndex + 1)];
+                var label = basePart[(plusIndex + 1)..].Trim();
+                if (TryResolveSymbolOrDot(label, address, symbols, out value))
+                {
+                    resolved = prefix + Convert.ToString(value, 8);
+                    return true;
+                }
+            }
+
+            var minusIndex = basePart.IndexOf('-');
+            if (minusIndex > 0 && minusIndex < basePart.Length - 1)
+            {
+                var prefix = basePart[..(minusIndex + 1)];
+                var label = basePart[(minusIndex + 1)..].Trim();
+                if (TryResolveSymbolOrDot(label, address, symbols, out value))
+                {
+                    resolved = prefix + Convert.ToString(value, 8);
+                    return true;
+                }
+            }
+
+            error = $"unknown label '{basePart}'";
+            return false;
+        }
+
+        private static bool TryResolveDotRelative(string token, out string resolved)
+        {
+            resolved = string.Empty;
+            if (token.Length < 2)
+            {
+                return false;
+            }
+
+            var sign = token[1];
+            if (sign != '+' && sign != '-')
+            {
+                return false;
+            }
+
+            var magnitudeText = token[2..];
+            if (!TryParseNumber(magnitudeText, out var magnitude))
+            {
+                return false;
+            }
+
+            resolved = $"P{sign}{Convert.ToString(magnitude, 8)}";
+            return true;
+        }
+
+        private static bool TryResolveSymbolOrDot(
+            string token,
+            int address,
+            Dictionary<string, int> symbols,
+            out int value)
+        {
+            if (token == ".")
+            {
+                value = address;
+                return true;
+            }
+
+            return symbols.TryGetValue(token, out value);
+        }
+
+        private static bool TryResolveValue(string token, Dictionary<string, int> symbols, int address, out int value)
+        {
+            if (TryParseNumber(token, out value))
+            {
+                return true;
+            }
+
+            if (token == ".")
+            {
+                value = address;
+                return true;
+            }
+
+            if (symbols.TryGetValue(token, out var symbolValue))
+            {
+                value = symbolValue;
+                return true;
+            }
+
+            value = 0;
+            return false;
+        }
+
+        private static bool IsOperandMnemonic(string mnemonic)
+        {
+            return mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("LDI", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("STOR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("HALT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private readonly struct AsmLine
+        {
+            public AsmLine(int lineNumber, int address, string mnemonic, string? operand, string rawLine)
+            {
+                LineNumber = lineNumber;
+                Address = address;
+                Mnemonic = mnemonic;
+                Operand = operand;
+                Values = new List<string>();
+                RawLine = rawLine;
+            }
+
+            public AsmLine(int lineNumber, int address, string mnemonic, List<string> values, string rawLine)
+            {
+                LineNumber = lineNumber;
+                Address = address;
+                Mnemonic = mnemonic;
+                Operand = null;
+                Values = values;
+                RawLine = rawLine;
+            }
+
+            public int LineNumber { get; }
+            public int Address { get; }
+            public string Mnemonic { get; }
+            public string? Operand { get; }
+            public List<string> Values { get; }
+            public string RawLine { get; }
         }
 
         private void SetBreak(TokenStream stream)
@@ -676,6 +1032,11 @@ namespace Ashen
             if (token.StartsWith("#", StringComparison.OrdinalIgnoreCase))
             {
                 return int.TryParse(token[1..], NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+            }
+
+            if (token.StartsWith("$", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryParseBase(token[1..], 16, out value);
             }
 
             return TryParseBase(token, 8, out value);
