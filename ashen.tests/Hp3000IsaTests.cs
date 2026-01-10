@@ -65,6 +65,23 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Dadd_ShouldAddTwoDoublewords()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0002); // A low
+        cpu.Push(0x0000); // B high
+        cpu.Push(0x0003); // C low
+        cpu.Push(0x0000); // D high
+        isa.TryExecute(0x0009, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0005, cpu.Ra);
+        Assert.Equal(0x0000, cpu.Rb);
+    }
+
+    [Fact]
     public void Add_ShouldAddTwoNumbers()
     {
         var cpu = CreateCpu();
@@ -192,6 +209,19 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Test_ShouldUpdateStaCc()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0);
+        isa.TryExecute(0x0015, cpu);
+
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0x0200, cpu.Sta);
+    }
+
+    [Fact]
     public void Xch_ShouldExchangeTopTwoStackValues()
     {
         var cpu = CreateCpu();
@@ -303,6 +333,19 @@ public class Hp3000IsaTests
         
         Assert.Equal(1, cpu.Sr);
         Assert.Equal(0xFF00, cpu.Ra);
+    }
+
+    [Fact]
+    public void Not_ShouldUpdateStaCc()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0000);
+        isa.TryExecute(0x0034, cpu);
+
+        Assert.Equal(0xFFFF, cpu.Ra);
+        Assert.Equal(0x0100, cpu.Sta);
     }
 
     [Fact]
@@ -422,6 +465,36 @@ public class Hp3000IsaTests
         
         Assert.True(result);
         Assert.Equal(0xCC08, opcode);
+    }
+
+    [Fact]
+    public void TryAssemble_Bcc_Mnemonics_ShouldMatchOpcodes()
+    {
+        var isa = new Hp3000Isa();
+
+        Assert.True(isa.TryAssemble("BN", "P+2", out var bn));
+        Assert.Equal(0xC202, bn);
+
+        Assert.True(isa.TryAssemble("BL", "P+2", out var bl));
+        Assert.Equal(0xC242, bl);
+
+        Assert.True(isa.TryAssemble("BE", "P+2", out var be));
+        Assert.Equal(0xC282, be);
+
+        Assert.True(isa.TryAssemble("BLE", "P+2", out var ble));
+        Assert.Equal(0xC2C2, ble);
+
+        Assert.True(isa.TryAssemble("BG", "P+2", out var bg));
+        Assert.Equal(0xC302, bg);
+
+        Assert.True(isa.TryAssemble("BNE", "P+2", out var bne));
+        Assert.Equal(0xC342, bne);
+
+        Assert.True(isa.TryAssemble("BGE", "P+2", out var bge));
+        Assert.Equal(0xC382, bge);
+
+        Assert.True(isa.TryAssemble("BA", "P+2", out var ba));
+        Assert.Equal(0xC3C2, ba);
     }
 
     [Fact]

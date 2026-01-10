@@ -888,7 +888,15 @@ namespace Ashen
                 || mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BLE", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BNE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BGE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BA", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BOV", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BNOV", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BCY", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BNCY", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LDI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
@@ -905,7 +913,15 @@ namespace Ashen
                 || mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase)
-                || mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase);
+                || mnemonic.Equals("BLE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BNE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BGE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BA", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BOV", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BNOV", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BCY", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BNCY", StringComparison.OrdinalIgnoreCase);
         }
 
         private readonly struct AsmLine

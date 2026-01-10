@@ -40,3 +40,14 @@ These test cases document expected STA behavior for ADD and SUB:
 | `077777` | `000001` | ADD | `100000` | c O CCL |
 | `177777` | `000001` | ADD | `000000` | C o CCE |
 | `000000` | `000001` | SUB | `177777` | C o CCL |
+
+## Indicator Updates (Current)
+
+These operations currently update STA:
+
+- `ADD`/`SUB`: sets CC (CCA), Carry, and Overflow.
+- `DIV`: sets CC based on quotient; sets Overflow on divide-by-zero.
+- `NOT`: sets CC based on result.
+- `TEST`: sets CC based on TOS.
+
+Other instructions leave STA unchanged unless specified.

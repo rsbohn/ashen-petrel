@@ -34,9 +34,25 @@ namespace Ashen
         private const ushort DxbzIndirectFlag = 0x0800;
         private const ushort DxbzBackFlag = 0x0020;
         private const ushort DxbzDispMask = 0x001F;
+        private const ushort BovMask = 0xFFC0;
+        private const ushort BovBase = 0x1600;
+        private const ushort BovDispSign = 0x0020;
+        private const ushort BovDispMask = 0x001F;
+        private const ushort BnovMask = 0xFFC0;
+        private const ushort BnovBase = 0x1680;
+        private const ushort BnovDispSign = 0x0020;
+        private const ushort BnovDispMask = 0x001F;
+        private const ushort BcyMask = 0xFFC0;
+        private const ushort BcyBase = 0x1300;
+        private const ushort BcyDispSign = 0x0020;
+        private const ushort BcyDispMask = 0x001F;
+        private const ushort BncyMask = 0xFFC0;
+        private const ushort BncyBase = 0x1340;
+        private const ushort BncyDispSign = 0x0020;
+        private const ushort BncyDispMask = 0x001F;
         private const ushort CondBranchMask = 0xFE00;
         private const ushort CondBranchBase = 0xC200;
-        private const ushort CondBranchCcfMask = 0x0700;
+        private const ushort CondBranchCcfMask = 0x01C0;
         private const ushort CondBranchDispSign = 0x0020;
         private const ushort CondBranchDispMask = 0x001F;
         private const ushort StorMask = 0xF200;
@@ -121,6 +137,23 @@ namespace Ashen
                         cpu.Push(0);
                         return true;
                     }
+                case 0x0009: // DADD
+                    {
+                        var a = cpu.Pop();
+                        var b = cpu.Pop();
+                        var c = cpu.Pop();
+                        var d = cpu.Pop();
+                        var right = ((uint)b << 16) | a;
+                        var left = ((uint)d << 16) | c;
+                        var sum = (ulong)left + right;
+                        var result = (uint)sum;
+                        var high = (ushort)(result >> 16);
+                        var low = (ushort)(result & 0xFFFF);
+                        cpu.Push(high);
+                        cpu.Push(low);
+                        UpdateDoubleAddFlags(cpu, left, right, result, sum > 0xFFFFFFFF);
+                        return true;
+                    }
                 case 0x0010: // ADD
                     {
                         var a = cpu.Pop();
@@ -170,6 +203,12 @@ namespace Ashen
                     {
                         var a = cpu.Pop();
                         cpu.Push((ushort)(0 - a));
+                        return true;
+                    }
+                case 0x0015: // TEST
+                    {
+                        var value = cpu.Peek();
+                        UpdateCcFlags(cpu, value);
                         return true;
                     }
                 case 0x0016: // STBX
@@ -238,7 +277,9 @@ namespace Ashen
                 case 0x0034: // NOT
                     {
                         var a = cpu.Pop();
-                        cpu.Push((ushort)~a);
+                        var result = (ushort)~a;
+                        cpu.Push(result);
+                        UpdateCcFlags(cpu, result);
                         return true;
                     }
                 case 0x0035: // OR
@@ -340,7 +381,7 @@ namespace Ashen
 
             if ((word & CondBranchMask) == CondBranchBase)
             {
-                var ccf = (ushort)((word & CondBranchCcfMask) >> 8);
+                var ccf = (ushort)((word & CondBranchCcfMask) >> 6);
                 if (ShouldBranchOnCcf(ccf, cpu.Sta))
                 {
                     var offset = word & CondBranchDispMask;
@@ -351,6 +392,70 @@ namespace Ashen
                     cpu.Pc = target & 0x7fff;
                 }
 
+                return true;
+            }
+
+            if ((word & BovMask) == BovBase)
+            {
+                if ((cpu.Sta & StatusO) != 0)
+                {
+                    var offset = word & BovDispMask;
+                    var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    var target = (word & BovDispSign) != 0
+                        ? instructionAddress - offset
+                        : instructionAddress + offset;
+                    cpu.Pc = target & 0x7fff;
+                }
+
+                cpu.Sta = (ushort)(cpu.Sta & ~StatusO);
+                return true;
+            }
+
+            if ((word & BnovMask) == BnovBase)
+            {
+                if ((cpu.Sta & StatusO) == 0)
+                {
+                    var offset = word & BnovDispMask;
+                    var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    var target = (word & BnovDispSign) != 0
+                        ? instructionAddress - offset
+                        : instructionAddress + offset;
+                    cpu.Pc = target & 0x7fff;
+                }
+
+                cpu.Sta = (ushort)(cpu.Sta & ~StatusO);
+                return true;
+            }
+
+            if ((word & BcyMask) == BcyBase)
+            {
+                if ((cpu.Sta & StatusC) != 0)
+                {
+                    var offset = word & BcyDispMask;
+                    var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    var target = (word & BcyDispSign) != 0
+                        ? instructionAddress - offset
+                        : instructionAddress + offset;
+                    cpu.Pc = target & 0x7fff;
+                }
+
+                cpu.Sta = (ushort)(cpu.Sta & ~StatusC);
+                return true;
+            }
+
+            if ((word & BncyMask) == BncyBase)
+            {
+                if ((cpu.Sta & StatusC) == 0)
+                {
+                    var offset = word & BncyDispMask;
+                    var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    var target = (word & BncyDispSign) != 0
+                        ? instructionAddress - offset
+                        : instructionAddress + offset;
+                    cpu.Pc = target & 0x7fff;
+                }
+
+                cpu.Sta = (ushort)(cpu.Sta & ~StatusC);
                 return true;
             }
 
@@ -475,6 +580,26 @@ namespace Ashen
                 return DisassembleCondBranch(opcode);
             }
 
+            if ((opcode & BovMask) == BovBase)
+            {
+                return DisassembleBov(opcode);
+            }
+
+            if ((opcode & BnovMask) == BnovBase)
+            {
+                return DisassembleBnov(opcode);
+            }
+
+            if ((opcode & BcyMask) == BcyBase)
+            {
+                return DisassembleBcy(opcode);
+            }
+
+            if ((opcode & BncyMask) == BncyBase)
+            {
+                return DisassembleBncy(opcode);
+            }
+
             if ((opcode & DxbzMask) == DxbzBase)
             {
                 return DisassembleDxbz(opcode);
@@ -548,15 +673,20 @@ namespace Ashen
 
             if (mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase))
             {
-                return TryAssembleCondBranch(operand, 1, out opcode);
+                return TryAssembleCondBranch(operand, 0, out opcode);
             }
 
             if (mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase))
             {
-                return TryAssembleCondBranch(operand, 2, out opcode);
+                return TryAssembleCondBranch(operand, 1, out opcode);
             }
 
             if (mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 2, out opcode);
+            }
+
+            if (mnemonic.Equals("BLE", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleCondBranch(operand, 3, out opcode);
             }
@@ -564,6 +694,41 @@ namespace Ashen
             if (mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleCondBranch(operand, 4, out opcode);
+            }
+
+            if (mnemonic.Equals("BNE", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 5, out opcode);
+            }
+
+            if (mnemonic.Equals("BGE", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 6, out opcode);
+            }
+
+            if (mnemonic.Equals("BA", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 7, out opcode);
+            }
+
+            if (mnemonic.Equals("BOV", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleBov(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("BNOV", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleBnov(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("BCY", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleBcy(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("BNCY", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleBncy(operand, out opcode);
             }
 
             if (mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
@@ -695,16 +860,20 @@ namespace Ashen
 
         private static string DisassembleCondBranch(ushort word)
         {
-            var ccf = (ushort)((word & CondBranchCcfMask) >> 8);
+            var ccf = (ushort)((word & CondBranchCcfMask) >> 6);
             var displacement = (ushort)(word & CondBranchDispMask);
             var direction = (word & CondBranchDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
             var mnemonic = ccf switch
             {
-                1 => "BN",
-                2 => "BL",
-                3 => "BE",
+                0 => "BN",
+                1 => "BL",
+                2 => "BE",
+                3 => "BLE",
                 4 => "BG",
+                5 => "BNE",
+                6 => "BGE",
+                7 => "BA",
                 _ => $"BCC {ccf}"
             };
 
@@ -718,6 +887,38 @@ namespace Ashen
             var suffix = (word & DxbzIndirectFlag) != 0 ? ",I" : "";
             var offsetText = Convert.ToString(displacement, 8);
             return $"DXBZ P{direction}{offsetText}{suffix}";
+        }
+
+        private static string DisassembleBov(ushort word)
+        {
+            var displacement = (ushort)(word & BovDispMask);
+            var direction = (word & BovDispSign) != 0 ? '-' : '+';
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"BOV P{direction}{offsetText}";
+        }
+
+        private static string DisassembleBnov(ushort word)
+        {
+            var displacement = (ushort)(word & BnovDispMask);
+            var direction = (word & BnovDispSign) != 0 ? '-' : '+';
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"BNOV P{direction}{offsetText}";
+        }
+
+        private static string DisassembleBcy(ushort word)
+        {
+            var displacement = (ushort)(word & BcyDispMask);
+            var direction = (word & BcyDispSign) != 0 ? '-' : '+';
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"BCY P{direction}{offsetText}";
+        }
+
+        private static string DisassembleBncy(ushort word)
+        {
+            var displacement = (ushort)(word & BncyDispMask);
+            var direction = (word & BncyDispSign) != 0 ? '-' : '+';
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"BNCY P{direction}{offsetText}";
         }
 
         private static bool TryAssembleBranch(string operand, out ushort opcode)
@@ -1070,7 +1271,7 @@ namespace Ashen
                 return false;
             }
 
-            opcode = (ushort)(CondBranchBase | (ccf << 8) | offset);
+            opcode = (ushort)(CondBranchBase | (ccf << 6) | offset);
             if (direction == '-')
             {
                 opcode |= CondBranchDispSign;
@@ -1144,6 +1345,77 @@ namespace Ashen
             return true;
         }
 
+        private static bool TryAssembleBov(string operand, out ushort opcode)
+        {
+            return TryAssembleShortBranch(operand, BovBase, BovDispMask, BovDispSign, out opcode);
+        }
+
+        private static bool TryAssembleBnov(string operand, out ushort opcode)
+        {
+            return TryAssembleShortBranch(operand, BnovBase, BnovDispMask, BnovDispSign, out opcode);
+        }
+
+        private static bool TryAssembleBcy(string operand, out ushort opcode)
+        {
+            return TryAssembleShortBranch(operand, BcyBase, BcyDispMask, BcyDispSign, out opcode);
+        }
+
+        private static bool TryAssembleBncy(string operand, out ushort opcode)
+        {
+            return TryAssembleShortBranch(operand, BncyBase, BncyDispMask, BncyDispSign, out opcode);
+        }
+
+        private static bool TryAssembleShortBranch(
+            string operand,
+            ushort baseOpcode,
+            ushort dispMask,
+            ushort dispSign,
+            out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var basePart = operand.Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var direction = '+';
+            var offsetText = basePart;
+            if (basePart[0] == 'P' || basePart[0] == 'p')
+            {
+                if (basePart.Length < 3)
+                {
+                    return false;
+                }
+
+                direction = basePart[1];
+                if (direction != '+' && direction != '-')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[2..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > dispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(baseOpcode | offset);
+            if (direction == '-')
+            {
+                opcode |= dispSign;
+            }
+
+            return true;
+        }
+
         private static bool ShouldBranchOnCcf(ushort ccf, ushort status)
         {
             var cc = (ushort)(status & StatusCcMask);
@@ -1180,6 +1452,43 @@ namespace Ashen
                 updated |= StatusC;
             }
 
+            cpu.Sta = updated;
+        }
+
+        private static void UpdateDoubleAddFlags(Hp3000Cpu cpu, uint left, uint right, uint result, bool carry)
+        {
+            var cc = result == 0
+                ? StatusCce
+                : (result & 0x80000000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO | StatusC));
+            updated |= cc;
+            if (carry)
+            {
+                updated |= StatusC;
+            }
+
+            var signLeft = (left & 0x80000000) != 0;
+            var signRight = (right & 0x80000000) != 0;
+            var signResult = (result & 0x80000000) != 0;
+            if (signLeft == signRight && signResult != signLeft)
+            {
+                updated |= StatusO;
+            }
+
+            cpu.Sta = updated;
+        }
+
+        private static void UpdateCcFlags(Hp3000Cpu cpu, ushort result)
+        {
+            var cc = result == 0
+                ? StatusCce
+                : (result & 0x8000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~StatusCcMask);
+            updated |= cc;
             cpu.Sta = updated;
         }
 
