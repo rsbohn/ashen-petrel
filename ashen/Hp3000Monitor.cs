@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 
 namespace Ashen
@@ -130,7 +131,7 @@ namespace Ashen
             Console.WriteLine("Stack: . dup drop swap over + - and or xor invert ! @");
             Console.WriteLine("Devices: devs status attach detach readblk writeblk");
             Console.WriteLine("Numbers are octal; use # for decimal.");
-            Console.WriteLine("Assembler: asm <mnemonic> [addr]");
+            Console.WriteLine("Assembler: asm <mnemonic> [addr] | asm <file>");
         }
 
         private void ListWords()
@@ -234,7 +235,7 @@ namespace Ashen
 
             _cpu.Reset(address);
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
-            var ran = _cpu.Run(maxSteps);
+            var ran = _cpu.Run(steps);
             Console.WriteLine($"ran {ran} steps");
             ReportHaltReason();
         }
@@ -242,7 +243,7 @@ namespace Ashen
         private void RunCpu(TokenStream stream)
         {
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
-            var ran = _cpu.Run(maxSteps);
+            var ran = _cpu.Run(steps);
             Console.WriteLine($"ran {ran} steps");
             ReportHaltReason();
         }
@@ -375,6 +376,12 @@ namespace Ashen
                 return;
             }
 
+            if (File.Exists(token))
+            {
+                AssembleFile(token);
+                return;
+            }
+
             if (token.Equals("BR", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LDI", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
@@ -412,6 +419,111 @@ namespace Ashen
             var assembledLine = $"{token} -> {ToOctal(simpleAddress)}";
 
             Console.WriteLine(assembledLine);
+        }
+
+        private void AssembleFile(string path)
+        {
+            var address = _cpu.Pc;
+            var assembled = 0;
+            var lineNumber = 0;
+
+            foreach (var rawLine in File.ReadLines(path))
+            {
+                lineNumber++;
+                var line = StripComment(rawLine).Trim();
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                var colonIndex = line.IndexOf(':');
+                if (colonIndex >= 0)
+                {
+                    line = line[(colonIndex + 1)..].Trim();
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+                }
+
+                var parts = line.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0)
+                {
+                    continue;
+                }
+
+                var mnemonic = parts[0];
+                var operand = parts.Length > 1 ? parts[1].Trim() : null;
+
+                if (mnemonic.Equals("ORG", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (operand == null || !TryParseNumber(operand, out var org))
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: invalid ORG");
+                        return;
+                    }
+
+                    address = org & 0x7fff;
+                    continue;
+                }
+
+                if (mnemonic.EndsWith(",", StringComparison.Ordinal))
+                {
+                    var firstMnemonic = mnemonic.TrimEnd(',');
+                    if (string.IsNullOrWhiteSpace(operand))
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: missing second opcode");
+                        return;
+                    }
+
+                    var secondParts = operand.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (secondParts.Length != 1)
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: invalid packed opcodes");
+                        return;
+                    }
+
+                    if (!_isa.TryAssemble(firstMnemonic, out var firstOpcode)
+                        || !_isa.TryAssemble(secondParts[0], out var secondOpcode))
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: unknown mnemonic");
+                        return;
+                    }
+
+                    var packed = (ushort)((secondOpcode << 6) | firstOpcode);
+                    _memory.Write(address, packed);
+                    address = (address + 1) & 0x7fff;
+                    assembled++;
+                    continue;
+                }
+
+                if (operand != null && _isa.TryAssemble(mnemonic, operand, out var opcodeWithOperand))
+                {
+                    _memory.Write(address, opcodeWithOperand);
+                    address = (address + 1) & 0x7fff;
+                    assembled++;
+                    continue;
+                }
+
+                if (_isa.TryAssemble(mnemonic, out var opcode))
+                {
+                    _memory.Write(address, opcode);
+                    address = (address + 1) & 0x7fff;
+                    assembled++;
+                    continue;
+                }
+
+                Console.WriteLine($"asm {path}:{lineNumber}: unknown mnemonic {mnemonic}");
+                return;
+            }
+
+            Console.WriteLine($"assembled {assembled} words");
+        }
+
+        private static string StripComment(string line)
+        {
+            var index = line.IndexOf(';');
+            return index >= 0 ? line[..index] : line;
         }
 
         private void SetBreak(TokenStream stream)

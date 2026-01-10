@@ -12,7 +12,7 @@ namespace Ashen
         private const ushort BranchIndirect = 0x0400;
         private const ushort BranchIndexed = 0x0800;
         private const ushort BranchOffsetMask = 0x00FF;
-        private const ushort LoadMask = 0x7000;
+        private const ushort LoadMask = 0xF000;
         private const ushort LoadBase = 0x4000;
         private const ushort LoadXFlag = 0x0400;
         private const ushort LoadIFlag = 0x0200;
@@ -241,6 +241,48 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & StorMask) == StorBase)
+            {
+                var displacement = word & StorDispMask;
+                var storTarget = (cpu.Db + displacement) & 0x7fff;
+                if ((word & StorXFlag) != 0)
+                {
+                    storTarget = (storTarget + cpu.X) & 0x7fff;
+                }
+
+                if ((word & StorIFlag) != 0)
+                {
+                    storTarget = cpu.ReadWord(storTarget) & 0x7fff;
+                }
+
+                var value = cpu.Pop();
+                cpu.WriteWord(storTarget, value);
+                return true;
+            }
+
+            if ((word & BranchMask) == BranchBase)
+            {
+                var offset = word & BranchOffsetMask;
+                var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                var target = (word & BranchBack) != 0
+                    ? instructionAddress - offset
+                    : instructionAddress + offset;
+                target &= 0x7fff;
+
+                if ((word & BranchIndexed) != 0)
+                {
+                    target = (target + cpu.X) & 0x7fff;
+                }
+
+                if ((word & BranchIndirect) != 0)
+                {
+                    target = cpu.ReadWord(target) & 0x7fff;
+                }
+
+                cpu.Pc = target;
+                return true;
+            }
+
             if ((word & LoadMask) == LoadBase)
             {
                 var displacement = word & LoadDispValueMask;
@@ -265,49 +307,7 @@ namespace Ashen
                 return true;
             }
 
-            if ((word & StorMask) == StorBase)
-            {
-                var displacement = word & StorDispMask;
-                var storTarget = (cpu.Db + displacement) & 0x7fff;
-                if ((word & StorXFlag) != 0)
-                {
-                    storTarget = (storTarget + cpu.X) & 0x7fff;
-                }
-
-                if ((word & StorIFlag) != 0)
-                {
-                    storTarget = cpu.ReadWord(storTarget) & 0x7fff;
-                }
-
-                var value = cpu.Pop();
-                cpu.WriteWord(storTarget, value);
-                return true;
-            }
-
-            if ((word & BranchMask) != BranchBase)
-            {
-                return false;
-            }
-
-            var offset = word & BranchOffsetMask;
-            var instructionAddress = (cpu.Pc - 1) & 0x7fff;
-            var target = (word & BranchBack) != 0
-                ? instructionAddress - offset
-                : instructionAddress + offset;
-            target &= 0x7fff;
-
-            if ((word & BranchIndexed) != 0)
-            {
-                target = (target + cpu.X) & 0x7fff;
-            }
-
-            if ((word & BranchIndirect) != 0)
-            {
-                target = cpu.ReadWord(target) & 0x7fff;
-            }
-
-            cpu.Pc = target;
-            return true;
+            return false;
         }
 
         public string Disassemble(ushort opcode)
@@ -323,11 +323,6 @@ namespace Ashen
                 return DisassembleImmediate(opcode);
             }
 
-            if ((opcode & LoadMask) == LoadBase)
-            {
-                return DisassembleLoad(opcode);
-            }
-
             if ((opcode & StorMask) == StorBase)
             {
                 return DisassembleStor(opcode);
@@ -336,6 +331,11 @@ namespace Ashen
             if ((opcode & BranchMask) == BranchBase)
             {
                 return DisassembleBranch(opcode);
+            }
+
+            if ((opcode & LoadMask) == LoadBase)
+            {
+                return DisassembleLoad(opcode);
             }
 
             var firstOpcode = (ushort)(opcode & 0x003f);
@@ -360,6 +360,18 @@ namespace Ashen
             if (mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleBranch(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("HALT", StringComparison.OrdinalIgnoreCase))
+            {
+                if (operand.Trim() == "0")
+                {
+                    opcode = HaltWord;
+                    return true;
+                }
+
+                opcode = 0;
+                return false;
             }
 
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
