@@ -24,6 +24,22 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Delb_ShouldRemoveSecondStackValue()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(1);
+        cpu.Push(2);
+        cpu.Push(3);
+        isa.TryExecute(0x0001, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(3, cpu.Ra);
+        Assert.Equal(1, cpu.Rb);
+    }
+
+    [Fact]
     public void Zero_ShouldPushZero()
     {
         var cpu = CreateCpu();
@@ -63,6 +79,34 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Add_ShouldUpdateStaFlags()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x7FFF);
+        cpu.Push(1);
+        isa.TryExecute(0x0010, cpu);
+
+        Assert.Equal(0x8000, cpu.Ra);
+        Assert.Equal(0x0900, cpu.Sta);
+    }
+
+    [Fact]
+    public void Add_WithCarry_ShouldSetCarryAndZero()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0xFFFF);
+        cpu.Push(1);
+        isa.TryExecute(0x0010, cpu);
+
+        Assert.Equal(0, cpu.Ra);
+        Assert.Equal(0x0600, cpu.Sta);
+    }
+
+    [Fact]
     public void Sub_ShouldSubtractTwoNumbers()
     {
         var cpu = CreateCpu();
@@ -74,6 +118,20 @@ public class Hp3000IsaTests
         
         Assert.Equal(1, cpu.Sr);
         Assert.Equal(20, cpu.Ra);
+    }
+
+    [Fact]
+    public void Sub_ShouldUpdateStaFlags()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0);
+        cpu.Push(1);
+        isa.TryExecute(0x0011, cpu);
+
+        Assert.Equal(0xFFFF, cpu.Ra);
+        Assert.Equal(0x0500, cpu.Sta);
     }
 
     [Fact]
@@ -100,8 +158,9 @@ public class Hp3000IsaTests
         cpu.Push(5);
         isa.TryExecute(0x0013, cpu);
         
-        Assert.Equal(1, cpu.Sr);
-        Assert.Equal(6, cpu.Ra);
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0, cpu.Ra);
+        Assert.Equal(6, cpu.Rb);
     }
 
     [Fact]
@@ -114,8 +173,9 @@ public class Hp3000IsaTests
         cpu.Push(0);
         isa.TryExecute(0x0013, cpu);
         
-        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(2, cpu.Sr);
         Assert.Equal(0, cpu.Ra);
+        Assert.Equal(0, cpu.Rb);
     }
 
     [Fact]
@@ -460,52 +520,42 @@ public class Hp3000IsaTests
     }
 
     [Fact]
-    public void Stax_ShouldStoreValueToMemoryAtX()
+    public void Stax_ShouldStoreValueToX()
     {
         var cpu = CreateCpu();
         var isa = new Hp3000Isa();
         
-        cpu.X = 100;
         cpu.Push(0x1234);
         isa.TryExecute(0x0023, cpu);
         
         Assert.Equal(0, cpu.Sr);
-        Assert.Equal(0x1234, cpu.ReadWord(100));
+        Assert.Equal(0x1234, cpu.X);
     }
 
     [Fact]
-    public void Ldxa_ShouldLoadXFromStackTop()
+    public void Ldxa_ShouldPushXToStack()
     {
         var cpu = CreateCpu();
         var isa = new Hp3000Isa();
         
-        cpu.Push(0x5678);
+        cpu.X = 0x5678;
         isa.TryExecute(0x0024, cpu);
         
-        Assert.Equal(0, cpu.Sr);
-        Assert.Equal(0x5678, cpu.X);
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0x5678, cpu.Ra);
     }
 
     [Fact]
-    public void Stax_Ldxa_Combination_ShouldFillMemory()
+    public void Stax_Ldxa_Combination_ShouldMoveStackToX()
     {
         var cpu = CreateCpu();
         var isa = new Hp3000Isa();
         
-        cpu.Push(0xAAAA);  // fill value
-        cpu.Push(200);     // start address
-        isa.TryExecute(0x0024, cpu); // LDXA - load X from stack
-        
         cpu.Push(0xAAAA);
-        isa.TryExecute(0x0023, cpu); // STAX - store to memory[200]
-        
-        cpu.Push(201);
-        isa.TryExecute(0x0024, cpu); // LDXA - update X to 201
-        
-        cpu.Push(0xAAAA);
-        isa.TryExecute(0x0023, cpu); // STAX - store to memory[201]
-        
-        Assert.Equal(0xAAAA, cpu.ReadWord(200));
-        Assert.Equal(0xAAAA, cpu.ReadWord(201));
+        isa.TryExecute(0x0023, cpu); // STAX - pop into X
+        isa.TryExecute(0x0024, cpu); // LDXA - push X
+
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0xAAAA, cpu.Ra);
     }
 }

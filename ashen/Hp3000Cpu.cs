@@ -28,6 +28,8 @@ namespace Ashen
         public ushort Rd { get; internal set; }
         public ushort X { get; internal set; }
         public ushort Db { get; internal set; }
+        public ushort Sta { get; internal set; }
+        public int StackDepth { get; internal set; }
         public bool Halted { get; private set; }
         public string? HaltReason { get; private set; }
 
@@ -43,6 +45,8 @@ namespace Ashen
             Rd = 0;
             X = 0;
             Db = 0;
+            Sta = 0;
+            StackDepth = 0;
             Halted = false;
             HaltReason = null;
         }
@@ -68,6 +72,7 @@ namespace Ashen
             {
                 Sr++;
             }
+            StackDepth++;
         }
 
         public ushort Pop()
@@ -97,6 +102,10 @@ namespace Ashen
                 Rd = 0;
             }
             Sr--;
+            if (StackDepth > 0)
+            {
+                StackDepth--;
+            }
             return value;
         }
 
@@ -206,6 +215,38 @@ namespace Ashen
             }
 
             return Rb;
+        }
+
+        public void DropSecond()
+        {
+            if (Halted)
+            {
+                return;
+            }
+
+            if (Sr < 2)
+            {
+                HaltWithError("stack underflow");
+                return;
+            }
+
+            Rb = Rc;
+            Rc = Rd;
+            if (Sr == 4)
+            {
+                Rd = _memory.Read(Sm);
+                Sm = (Sm + 1) & 0x7fff;
+            }
+            else
+            {
+                Rd = 0;
+            }
+
+            Sr--;
+            if (StackDepth > 0)
+            {
+                StackDepth--;
+            }
         }
 
         public void ReplaceTop(ushort value)

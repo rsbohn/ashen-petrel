@@ -34,6 +34,11 @@ namespace Ashen
         private const ushort DxbzIndirectFlag = 0x0800;
         private const ushort DxbzBackFlag = 0x0020;
         private const ushort DxbzDispMask = 0x001F;
+        private const ushort CondBranchMask = 0xFE00;
+        private const ushort CondBranchBase = 0xC200;
+        private const ushort CondBranchCcfMask = 0x0700;
+        private const ushort CondBranchDispSign = 0x0020;
+        private const ushort CondBranchDispMask = 0x001F;
         private const ushort StorMask = 0xF200;
         private const ushort StorBase = 0x5200;
         private const ushort StorXFlag = 0x0800;
@@ -43,6 +48,13 @@ namespace Ashen
         private const ushort ImmediateLdiBase = 0x2200;
         private const ushort ImmediateLdXiBase = 0x2300;
         private const ushort ImmediateValueMask = 0x00FF;
+        private const ushort StatusCcl = 0x0100;
+        private const ushort StatusCce = 0x0200;
+        private const ushort StatusCci = 0x0300;
+        private const ushort StatusCcMask = 0x0300;
+        private const ushort StatusCcg = 0x0000;
+        private const ushort StatusO = 0x0800;
+        private const ushort StatusC = 0x0400;
 
         private static readonly string[] Format2Mnemonics =
         {
@@ -88,7 +100,10 @@ namespace Ashen
                 case 0x0000: // NOP
                     return true;
                 case 0x0001: // DELB
-                    return true;
+                    {
+                        cpu.DropSecond();
+                        return true;
+                    }
                 case 0x0002: // DDEL
                     {
                         cpu.Pop();
@@ -110,14 +125,19 @@ namespace Ashen
                     {
                         var a = cpu.Pop();
                         var b = cpu.Pop();
-                        cpu.Push((ushort)(b + a));
+                        var sum = (uint)(b + a);
+                        var result = (ushort)sum;
+                        cpu.Push(result);
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(b, a, result));
                         return true;
                     }
                 case 0x0011: // SUB
                     {
                         var a = cpu.Pop();
                         var b = cpu.Pop();
-                        cpu.Push((ushort)(b - a));
+                        var result = (ushort)(b - a);
+                        cpu.Push(result);
+                        UpdateAddSubFlags(cpu, result, b < a, IsSubOverflow(b, a, result));
                         return true;
                     }
                 case 0x0012: // MPY
@@ -131,7 +151,19 @@ namespace Ashen
                     {
                         var a = cpu.Pop();
                         var b = cpu.Pop();
-                        cpu.Push(a == 0 ? (ushort)0 : (ushort)(b / a));
+                        if (a == 0)
+                        {
+                            cpu.Push(0);
+                            cpu.Push(0);
+                            UpdateDivFlags(cpu, 0, overflow: true);
+                            return true;
+                        }
+
+                        var quotient = (ushort)(b / a);
+                        var remainder = (ushort)(b % a);
+                        cpu.Push(quotient);
+                        cpu.Push(remainder);
+                        UpdateDivFlags(cpu, quotient, overflow: false);
                         return true;
                     }
                 case 0x0014: // NEG
@@ -306,6 +338,22 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & CondBranchMask) == CondBranchBase)
+            {
+                var ccf = (ushort)((word & CondBranchCcfMask) >> 8);
+                if (ShouldBranchOnCcf(ccf, cpu.Sta))
+                {
+                    var offset = word & CondBranchDispMask;
+                    var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    var target = (word & CondBranchDispSign) != 0
+                        ? instructionAddress - offset
+                        : instructionAddress + offset;
+                    cpu.Pc = target & 0x7fff;
+                }
+
+                return true;
+            }
+
             if ((word & DxbzMask) == DxbzBase)
             {
                 cpu.X = (ushort)(cpu.X - 1);
@@ -422,6 +470,11 @@ namespace Ashen
                 return DisassembleIxbz(opcode);
             }
 
+            if ((opcode & CondBranchMask) == CondBranchBase)
+            {
+                return DisassembleCondBranch(opcode);
+            }
+
             if ((opcode & DxbzMask) == DxbzBase)
             {
                 return DisassembleDxbz(opcode);
@@ -491,6 +544,26 @@ namespace Ashen
             if (mnemonic.Equals("IXBZ", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleIxbz(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 1, out opcode);
+            }
+
+            if (mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 2, out opcode);
+            }
+
+            if (mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 3, out opcode);
+            }
+
+            if (mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleCondBranch(operand, 4, out opcode);
             }
 
             if (mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
@@ -618,6 +691,24 @@ namespace Ashen
             var suffix = (word & IxbzIndirectFlag) != 0 ? ",I" : "";
             var offsetText = Convert.ToString(displacement, 8);
             return $"IXBZ P{direction}{offsetText}{suffix}";
+        }
+
+        private static string DisassembleCondBranch(ushort word)
+        {
+            var ccf = (ushort)((word & CondBranchCcfMask) >> 8);
+            var displacement = (ushort)(word & CondBranchDispMask);
+            var direction = (word & CondBranchDispSign) != 0 ? '-' : '+';
+            var offsetText = Convert.ToString(displacement, 8);
+            var mnemonic = ccf switch
+            {
+                1 => "BN",
+                2 => "BL",
+                3 => "BE",
+                4 => "BG",
+                _ => $"BCC {ccf}"
+            };
+
+            return $"{mnemonic} P{direction}{offsetText}";
         }
 
         private static string DisassembleDxbz(ushort word)
@@ -942,6 +1033,52 @@ namespace Ashen
             return true;
         }
 
+        private static bool TryAssembleCondBranch(string operand, ushort ccf, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var basePart = operand.Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var direction = '+';
+            var offsetText = basePart;
+            if (basePart[0] == 'P' || basePart[0] == 'p')
+            {
+                if (basePart.Length < 3)
+                {
+                    return false;
+                }
+
+                direction = basePart[1];
+                if (direction != '+' && direction != '-')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[2..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > CondBranchDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(CondBranchBase | (ccf << 8) | offset);
+            if (direction == '-')
+            {
+                opcode |= CondBranchDispSign;
+            }
+
+            return true;
+        }
+
         private static bool TryAssembleDxbz(string operand, out ushort opcode)
         {
             opcode = 0;
@@ -1005,6 +1142,78 @@ namespace Ashen
             }
 
             return true;
+        }
+
+        private static bool ShouldBranchOnCcf(ushort ccf, ushort status)
+        {
+            var cc = (ushort)(status & StatusCcMask);
+            return ccf switch
+            {
+                0 => false,
+                1 => cc == StatusCcl,
+                2 => cc == StatusCce,
+                3 => cc == StatusCcl || cc == StatusCce,
+                4 => cc == StatusCcg,
+                5 => cc == StatusCcg || cc == StatusCcl,
+                6 => cc == StatusCcg || cc == StatusCce,
+                7 => true,
+                _ => false
+            };
+        }
+
+        private static void UpdateAddSubFlags(Hp3000Cpu cpu, ushort result, bool carry, bool overflow)
+        {
+            var cc = result == 0
+                ? StatusCce
+                : (result & 0x8000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO | StatusC));
+            updated |= cc;
+            if (overflow)
+            {
+                updated |= StatusO;
+            }
+
+            if (carry)
+            {
+                updated |= StatusC;
+            }
+
+            cpu.Sta = updated;
+        }
+
+        private static bool IsAddOverflow(ushort b, ushort a, ushort result)
+        {
+            var signA = (a & 0x8000) != 0;
+            var signB = (b & 0x8000) != 0;
+            var signR = (result & 0x8000) != 0;
+            return signA == signB && signR != signA;
+        }
+
+        private static bool IsSubOverflow(ushort b, ushort a, ushort result)
+        {
+            var signA = (a & 0x8000) != 0;
+            var signB = (b & 0x8000) != 0;
+            var signR = (result & 0x8000) != 0;
+            return signA != signB && signR != signB;
+        }
+
+        private static void UpdateDivFlags(Hp3000Cpu cpu, ushort quotient, bool overflow)
+        {
+            var cc = quotient == 0
+                ? StatusCce
+                : (quotient & 0x8000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO));
+            updated |= cc;
+            if (overflow)
+            {
+                updated |= StatusO;
+            }
+
+            cpu.Sta = updated;
         }
         private static bool TryAssembleImmediate(string operand, ushort baseOpcode, out ushort opcode)
         {

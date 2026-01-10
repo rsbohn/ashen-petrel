@@ -338,7 +338,9 @@ namespace Ashen
 
         private void ShowRegs()
         {
-            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SP={ToOctal(_cpu.Sp)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} RA={ToOctal(_cpu.Ra)} RB={ToOctal(_cpu.Rb)} RC={ToOctal(_cpu.Rc)} RD={ToOctal(_cpu.Rd)} X={ToOctal(_cpu.X)} DB={ToOctal(_cpu.Db)} HALT={(_cpu.Halted ? "1" : "0")} STACK={_cpu.Sr}");
+            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} DB={ToOctal(_cpu.Db)} X={ToOctal(_cpu.X)} HALT={(_cpu.Halted ? "1" : "0")}");
+            Console.WriteLine($"STACK: {ToOctal(_cpu.Ra)} {ToOctal(_cpu.Rb)} {ToOctal(_cpu.Rc)} {ToOctal(_cpu.Rd)} ... ({ToOctalCount(_cpu.StackDepth)})");
+            Console.WriteLine($"STA: {FormatStatusFlags(_cpu.Sta)} {FormatStatusCondition(_cpu.Sta)} {ToOctalStatus(_cpu.Sta)}");
         }
 
         private void ReportHaltReason()
@@ -604,6 +606,33 @@ namespace Ashen
             return "0" + Convert.ToString(value, 8);
         }
 
+        private static string ToOctalStatus(ushort value)
+        {
+            return Convert.ToString(value, 8).PadLeft(3, '0');
+        }
+
+        private static string FormatStatusFlags(ushort value)
+        {
+            return $"{FormatFlag(value, 0x8000, 'M')} {FormatFlag(value, 0x4000, 'I')} {FormatFlag(value, 0x2000, 'T')} {FormatFlag(value, 0x1000, 'R')} {FormatFlag(value, 0x0800, 'O')} {FormatFlag(value, 0x0400, 'C')}";
+        }
+
+        private static char FormatFlag(ushort value, ushort mask, char flag)
+        {
+            return (value & mask) != 0 ? flag : char.ToLowerInvariant(flag);
+        }
+
+        private static string FormatStatusCondition(ushort value)
+        {
+            return (value & 0x0300) switch
+            {
+                0x0000 => "CCG",
+                0x0100 => "CCL",
+                0x0200 => "CCE",
+                0x0300 => "CCI",
+                _ => "CC?"
+            };
+        }
+
         private static string ExtractLabel(ref string line)
         {
             var colonIndex = line.IndexOf(':');
@@ -663,12 +692,23 @@ namespace Ashen
 
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
             {
-                if (!TryResolveLoadBase(basePart, address, symbols, out var loadBase, out error))
+                if (!TryResolveRelativeBase(basePart, address, symbols, out var loadBase, out error))
                 {
                     return false;
                 }
 
                 resolved = loadBase + suffix;
+                return true;
+            }
+
+            if (IsRelativeMnemonic(mnemonic))
+            {
+                if (!TryResolveRelativeBase(basePart, address, symbols, out var branchBase, out error))
+                {
+                    return false;
+                }
+
+                resolved = branchBase + suffix;
                 return true;
             }
 
@@ -681,7 +721,7 @@ namespace Ashen
             return true;
         }
 
-        private static bool TryResolveLoadBase(
+        private static bool TryResolveRelativeBase(
             string basePart,
             int address,
             Dictionary<string, int> symbols,
@@ -845,6 +885,10 @@ namespace Ashen
         private static bool IsOperandMnemonic(string mnemonic)
         {
             return mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LDI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
@@ -853,6 +897,15 @@ namespace Ashen
                 || mnemonic.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("HALT", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsRelativeMnemonic(string mnemonic)
+        {
+            return mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BG", StringComparison.OrdinalIgnoreCase);
         }
 
         private readonly struct AsmLine
