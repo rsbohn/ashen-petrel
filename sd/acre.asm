@@ -1,8 +1,9 @@
     ORG 40
 START:
-    LDXI 0
+    LDXI 100
     LDI 377
-    INCA
     DUP
-    STOR DB+100,X
+    STOR DB+077,X
+    DXBZ P+2
     BR P-3
+    HALT

@@ -19,6 +19,21 @@ namespace Ashen
         private const ushort LoadDispMask = 0x01FF;
         private const ushort LoadDispSign = 0x0100;
         private const ushort LoadDispValueMask = 0x00FF;
+        private const ushort IabzMask = 0x7FC0;
+        private const ushort IabzBase = 0x10C0;
+        private const ushort IabzIndirectFlag = 0x0080;
+        private const ushort IabzBackFlag = 0x0020;
+        private const ushort IabzDispMask = 0x001F;
+        private const ushort IxbzMask = 0xF7C0;
+        private const ushort IxbzBase = 0x1280;
+        private const ushort IxbzIndirectFlag = 0x0800;
+        private const ushort IxbzBackFlag = 0x0020;
+        private const ushort IxbzDispMask = 0x001F;
+        private const ushort DxbzMask = 0xF7C0;
+        private const ushort DxbzBase = 0x12C0;
+        private const ushort DxbzIndirectFlag = 0x0800;
+        private const ushort DxbzBackFlag = 0x0020;
+        private const ushort DxbzDispMask = 0x001F;
         private const ushort StorMask = 0xF200;
         private const ushort StorBase = 0x5200;
         private const ushort StorXFlag = 0x0800;
@@ -241,6 +256,80 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & IabzMask) == IabzBase)
+            {
+                var a = cpu.Peek();
+                a = (ushort)(a + 1);
+                cpu.ReplaceTop(a);
+                if (a != 0)
+                {
+                    return true;
+                }
+
+                var offset = word & IabzDispMask;
+                var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                var target = (word & IabzBackFlag) != 0
+                    ? instructionAddress - offset
+                    : instructionAddress + offset;
+                target &= 0x7fff;
+
+                if ((word & IabzIndirectFlag) != 0)
+                {
+                    target = cpu.ReadWord(target) & 0x7fff;
+                }
+
+                cpu.Pc = target;
+                return true;
+            }
+
+            if ((word & IxbzMask) == IxbzBase)
+            {
+                cpu.X = (ushort)(cpu.X + 1);
+                if (cpu.X != 0)
+                {
+                    return true;
+                }
+
+                var offset = word & IxbzDispMask;
+                var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                var target = (word & IxbzBackFlag) != 0
+                    ? instructionAddress - offset
+                    : instructionAddress + offset;
+                target &= 0x7fff;
+
+                if ((word & IxbzIndirectFlag) != 0)
+                {
+                    target = cpu.ReadWord(target) & 0x7fff;
+                }
+
+                cpu.Pc = target;
+                return true;
+            }
+
+            if ((word & DxbzMask) == DxbzBase)
+            {
+                cpu.X = (ushort)(cpu.X - 1);
+                if (cpu.X != 0)
+                {
+                    return true;
+                }
+
+                var offset = word & DxbzDispMask;
+                var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                var target = (word & DxbzBackFlag) != 0
+                    ? instructionAddress - offset
+                    : instructionAddress + offset;
+                target &= 0x7fff;
+
+                if ((word & DxbzIndirectFlag) != 0)
+                {
+                    target = cpu.ReadWord(target) & 0x7fff;
+                }
+
+                cpu.Pc = target;
+                return true;
+            }
+
             if ((word & StorMask) == StorBase)
             {
                 var displacement = word & StorDispMask;
@@ -323,6 +412,21 @@ namespace Ashen
                 return DisassembleImmediate(opcode);
             }
 
+            if ((opcode & IabzMask) == IabzBase)
+            {
+                return DisassembleIabz(opcode);
+            }
+
+            if ((opcode & IxbzMask) == IxbzBase)
+            {
+                return DisassembleIxbz(opcode);
+            }
+
+            if ((opcode & DxbzMask) == DxbzBase)
+            {
+                return DisassembleDxbz(opcode);
+            }
+
             if ((opcode & StorMask) == StorBase)
             {
                 return DisassembleStor(opcode);
@@ -377,6 +481,21 @@ namespace Ashen
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleLoad(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("IABZ", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleIabz(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("IXBZ", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleIxbz(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleDxbz(operand, out opcode);
             }
 
             if (mnemonic.Equals("STOR", StringComparison.OrdinalIgnoreCase))
@@ -481,6 +600,33 @@ namespace Ashen
 
             var offsetText = Convert.ToString(displacement, 8);
             return $"STOR DB+{offsetText}{suffix}";
+        }
+
+        private static string DisassembleIabz(ushort word)
+        {
+            var displacement = (ushort)(word & IabzDispMask);
+            var direction = (word & IabzBackFlag) != 0 ? '-' : '+';
+            var suffix = (word & IabzIndirectFlag) != 0 ? ",I" : "";
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"IABZ P{direction}{offsetText}{suffix}";
+        }
+
+        private static string DisassembleIxbz(ushort word)
+        {
+            var displacement = (ushort)(word & IxbzDispMask);
+            var direction = (word & IxbzBackFlag) != 0 ? '-' : '+';
+            var suffix = (word & IxbzIndirectFlag) != 0 ? ",I" : "";
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"IXBZ P{direction}{offsetText}{suffix}";
+        }
+
+        private static string DisassembleDxbz(ushort word)
+        {
+            var displacement = (ushort)(word & DxbzDispMask);
+            var direction = (word & DxbzBackFlag) != 0 ? '-' : '+';
+            var suffix = (word & DxbzIndirectFlag) != 0 ? ",I" : "";
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"DXBZ P{direction}{offsetText}{suffix}";
         }
 
         private static bool TryAssembleBranch(string operand, out ushort opcode)
@@ -666,6 +812,200 @@ namespace Ashen
             return true;
         }
 
+        private static bool TryAssembleIabz(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var direction = '+';
+            var offsetText = basePart;
+            if (basePart[0] == 'P' || basePart[0] == 'p')
+            {
+                if (basePart.Length < 3)
+                {
+                    return false;
+                }
+
+                direction = basePart[1];
+                if (direction != '+' && direction != '-')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[2..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > IxbzDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(IabzBase | offset);
+            if (direction == '-')
+            {
+                opcode |= IabzBackFlag;
+            }
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= IabzIndirectFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssembleIxbz(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var direction = '+';
+            var offsetText = basePart;
+            if (basePart[0] == 'P' || basePart[0] == 'p')
+            {
+                if (basePart.Length < 3)
+                {
+                    return false;
+                }
+
+                direction = basePart[1];
+                if (direction != '+' && direction != '-')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[2..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > IxbzDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(IxbzBase | offset);
+            if (direction == '-')
+            {
+                opcode |= IxbzBackFlag;
+            }
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= IxbzIndirectFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssembleDxbz(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var direction = '+';
+            var offsetText = basePart;
+            if (basePart[0] == 'P' || basePart[0] == 'p')
+            {
+                if (basePart.Length < 3)
+                {
+                    return false;
+                }
+
+                direction = basePart[1];
+                if (direction != '+' && direction != '-')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[2..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > DxbzDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(DxbzBase | offset);
+            if (direction == '-')
+            {
+                opcode |= DxbzBackFlag;
+            }
+
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= DxbzIndirectFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
         private static bool TryAssembleImmediate(string operand, ushort baseOpcode, out ushort opcode)
         {
             opcode = 0;

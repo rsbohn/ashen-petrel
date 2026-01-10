@@ -386,7 +386,10 @@ namespace Ashen
                 || token.Equals("LDI", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("STOR", StringComparison.OrdinalIgnoreCase))
+                || token.Equals("STOR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
             {
                 if (!stream.TryNext(out var operand))
                 {
