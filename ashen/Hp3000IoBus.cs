@@ -13,6 +13,12 @@ namespace Ashen
 
         public void WriteWord(ushort deviceCode, ushort value)
         {
+            if (deviceCode == 2 && _devices.TryGet("lpt", out var rawDevice) && rawDevice is LinePrinterDevice rawPrinter)
+            {
+                rawPrinter.WriteRawWord(value);
+                return;
+            }
+
             if (!TryResolveDevice(deviceCode, out var device))
             {
                 return;
@@ -69,6 +75,7 @@ namespace Ashen
             {
                 0 => "tty",
                 1 => "lpt",
+                2 => "lpt",
                 _ => null
             };
 

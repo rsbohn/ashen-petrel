@@ -192,6 +192,12 @@ namespace Ashen
             }
         }
 
+        public void WriteRawWord(ushort value)
+        {
+            WriteRawByte((byte)(value >> 8));
+            WriteRawByte((byte)(value & 0xFF));
+        }
+
         public string Status()
         {
             return $"output={_path} cols={_columns} radix={_radix}";
@@ -224,6 +230,39 @@ namespace Ashen
             if (_radixWordsOnLine >= 8)
             {
                 AppendText(Environment.NewLine);
+                _radixWordsOnLine = 0;
+            }
+        }
+
+        private void WriteRawByte(byte value)
+        {
+            if (value == '\r')
+            {
+                return;
+            }
+
+            if (value == '\n')
+            {
+                AppendText(Environment.NewLine);
+                _columnPos = 0;
+                _radixWordsOnLine = 0;
+                return;
+            }
+
+            if (value == '\f')
+            {
+                AppendText("\f");
+                _columnPos = 0;
+                _radixWordsOnLine = 0;
+                return;
+            }
+
+            AppendText(((char)value).ToString());
+            _columnPos++;
+            if (_columnPos >= _columns)
+            {
+                AppendText(Environment.NewLine);
+                _columnPos = 0;
                 _radixWordsOnLine = 0;
             }
         }

@@ -87,10 +87,10 @@ Overflow/carry branches use separate short formats:
 | `LOAD` | `040007` | Load word at P±disp (optional ,I/,X) onto stack. |
 | `STOR` | `051000` | Store TOS at DB+disp (optional ,I/,X). |
 | `HALT` | `030360` | Halt execution. |
-| `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS low byte. |
+| `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS word. |
 | `RIO` | `0301KK` | Read I/O; K (4-bit device code), pushes low byte. |
 
-Device codes: `0` = `tty`, `1` = `lpt`.
+Device codes: `0` = `tty`, `1` = `lpt` (processed), `2` = `lpt` (raw word).
 
 ## Complete Format 2 Opcode Table
 

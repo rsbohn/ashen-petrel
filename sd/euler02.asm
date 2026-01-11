@@ -10,6 +10,8 @@ INIT:
     STOR UB
     LDI 2
     STOR TB
+    LOAD NLFF
+    WIO 2
     BR LOOP
 LIMA:   DW 004400       ; low word (octal) for 4,000,000 decimal
 LIMB:   DW 000075       ; high word
@@ -55,5 +57,13 @@ CHILL:
     DEL, DEL        ; drop T
     BR LOOP
 
+NLFF:
+    DW $0A0C
 DONE:
+    LOAD NLFF       ; print NL FF then final answer
+    WIO 2
+    LOAD SUMA
+    WIO 1
+    LOAD SUMB
+    WIO 1
     HALT

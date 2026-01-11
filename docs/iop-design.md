@@ -41,6 +41,9 @@ Implement the I/O opcodes in the ISA:
 
 The line printer supports multiple radix modes for WIO-driven output:
 
+- Device code `1` sends processed output using the radix modes below.
+- Device code `2` sends raw 16-bit words (no radix formatting).
+
 - `0` (default): ASCII mode, writes low byte.
 - `2`: Binary `hhhhhhhh llllllll` (high byte then low byte), one word per line.
 - `8`: Octal `000000` with space-separated words, eight words per line.
