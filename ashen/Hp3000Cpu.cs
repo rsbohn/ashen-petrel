@@ -88,11 +88,12 @@ namespace Ashen
                 return 0;
             }
 
+            var hadSpill = Sr == 4 && StackDepth > 4;
             var value = Ra;
             Ra = Rb;
             Rb = Rc;
             Rc = Rd;
-            if (Sr == 4)
+            if (hadSpill)
             {
                 Rd = _memory.Read(Sm);
                 Sm = (Sm + 1) & 0x7fff;
@@ -101,7 +102,10 @@ namespace Ashen
             {
                 Rd = 0;
             }
-            Sr--;
+            if (!hadSpill)
+            {
+                Sr--;
+            }
             if (StackDepth > 0)
             {
                 StackDepth--;
@@ -230,9 +234,10 @@ namespace Ashen
                 return;
             }
 
+            var hadSpill = Sr == 4 && StackDepth > 4;
             Rb = Rc;
             Rc = Rd;
-            if (Sr == 4)
+            if (hadSpill)
             {
                 Rd = _memory.Read(Sm);
                 Sm = (Sm + 1) & 0x7fff;
@@ -242,7 +247,10 @@ namespace Ashen
                 Rd = 0;
             }
 
-            Sr--;
+            if (!hadSpill)
+            {
+                Sr--;
+            }
             if (StackDepth > 0)
             {
                 StackDepth--;

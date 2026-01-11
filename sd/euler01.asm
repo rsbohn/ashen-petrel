@@ -17,26 +17,27 @@ LOOP:
     TEST
     DEL
     BE SUM
+NEXT:               ; ensure DXBZ runs every iteration
     DXBZ P+2
     BR LOOP
     HALT
 
-SUM:                ; (n -- n) X is destroyed
+SUM:                ; (n -- n)
     DUP             ;TOTAL += n
-    STAX
-    LOAD TB
-    LOAD TA         ; LOAD double TOTAL (a b 0 n n)
     ZERO            ; B = 0
-    LDXA            ; A = n
+    XCH
+    LOAD TA
+    LOAD TB         ; LOAD double TOTAL (a b 0 n n)
     DADD            ; B,A = D,C + B,A
     BCY DONE
-    STOR TA         ; A
-    STOR TB         ; B
-    BR LOOP
+    STOR TB         ; A
+    STOR TA         ; B
+    BR NEXT
 DONE:
+    DEL, DEL        ; drop overflow result
     HALT            ; carry detected
 
-MAX:    DW 01750
+MAX:    DW 01747     ; iterate n from 1..999 (Euler 01 sums below 1000)
     ; total is a double word value
 TOTAL:
 TB: DW 00000

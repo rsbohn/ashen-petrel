@@ -77,8 +77,30 @@ public class Hp3000IsaTests
         isa.TryExecute(0x0009, cpu);
 
         Assert.Equal(2, cpu.Sr);
-        Assert.Equal(0x0005, cpu.Ra);
-        Assert.Equal(0x0000, cpu.Rb);
+        Assert.Equal(0x0000, cpu.Ra);
+        Assert.Equal(0x0005, cpu.Rb);
+    }
+
+    [Fact]
+    public void Pop_WithSpilledStack_ShouldKeepSrAtFour()
+    {
+        var cpu = CreateCpu();
+
+        cpu.Push(1);
+        cpu.Push(2);
+        cpu.Push(3);
+        cpu.Push(4);
+        cpu.Push(5);
+
+        Assert.Equal(4, cpu.Sr);
+        Assert.Equal(5, cpu.StackDepth);
+
+        cpu.Pop();
+
+        Assert.Equal(4, cpu.Sr);
+        Assert.Equal(4, cpu.StackDepth);
+        Assert.Equal(4, cpu.Ra);
+        Assert.Equal(1, cpu.Rd);
     }
 
     [Fact]
