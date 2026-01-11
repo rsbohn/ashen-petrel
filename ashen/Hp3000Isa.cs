@@ -50,6 +50,10 @@ namespace Ashen
         private const ushort BncyBase = 0x1340;
         private const ushort BncyDispSign = 0x0020;
         private const ushort BncyDispMask = 0x001F;
+        private const ushort BroMask = 0xFFC0;
+        private const ushort BroBase = 0x1780;
+        private const ushort BroDispSign = 0x0020;
+        private const ushort BroDispMask = 0x001F;
         private const ushort CondBranchMask = 0xFE00;
         private const ushort CondBranchBase = 0xC200;
         private const ushort CondBranchCcfMask = 0x01C0;
@@ -459,6 +463,22 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & BroMask) == BroBase)
+            {
+                var value = cpu.Pop();
+                if ((value & 0x8000) != 0)
+                {
+                    var offset = word & BroDispMask;
+                    var instructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    var target = (word & BroDispSign) != 0
+                        ? instructionAddress - offset
+                        : instructionAddress + offset;
+                    cpu.Pc = target & 0x7fff;
+                }
+
+                return true;
+            }
+
             if ((word & DxbzMask) == DxbzBase)
             {
                 cpu.X = (ushort)(cpu.X - 1);
@@ -600,6 +620,11 @@ namespace Ashen
                 return DisassembleBncy(opcode);
             }
 
+            if ((opcode & BroMask) == BroBase)
+            {
+                return DisassembleBro(opcode);
+            }
+
             if ((opcode & DxbzMask) == DxbzBase)
             {
                 return DisassembleDxbz(opcode);
@@ -729,6 +754,11 @@ namespace Ashen
             if (mnemonic.Equals("BNCY", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleBncy(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("BRO", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleBro(operand, out opcode);
             }
 
             if (mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
@@ -919,6 +949,14 @@ namespace Ashen
             var direction = (word & BncyDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
             return $"BNCY P{direction}{offsetText}";
+        }
+
+        private static string DisassembleBro(ushort word)
+        {
+            var displacement = (ushort)(word & BroDispMask);
+            var direction = (word & BroDispSign) != 0 ? '-' : '+';
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"BRO P{direction}{offsetText}";
         }
 
         private static bool TryAssembleBranch(string operand, out ushort opcode)
@@ -1363,6 +1401,11 @@ namespace Ashen
         private static bool TryAssembleBncy(string operand, out ushort opcode)
         {
             return TryAssembleShortBranch(operand, BncyBase, BncyDispMask, BncyDispSign, out opcode);
+        }
+
+        private static bool TryAssembleBro(string operand, out ushort opcode)
+        {
+            return TryAssembleShortBranch(operand, BroBase, BroDispMask, BroDispSign, out opcode);
         }
 
         private static bool TryAssembleShortBranch(

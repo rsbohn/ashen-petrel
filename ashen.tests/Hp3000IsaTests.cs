@@ -490,6 +490,17 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void TryAssemble_Bro_ShouldAssemble()
+    {
+        var isa = new Hp3000Isa();
+
+        var result = isa.TryAssemble("BRO", "P+2", out var opcode);
+
+        Assert.True(result);
+        Assert.Equal(0x1782, opcode);
+    }
+
+    [Fact]
     public void TryAssemble_Bcc_Mnemonics_ShouldMatchOpcodes()
     {
         var isa = new Hp3000Isa();
@@ -550,6 +561,16 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Disassemble_Bro_ShouldReturnMnemonic()
+    {
+        var isa = new Hp3000Isa();
+
+        var disassembly = isa.Disassemble(0x1782);
+
+        Assert.Equal("BRO P+2", disassembly);
+    }
+
+    [Fact]
     public void TryExecuteWord_Branch_Forward()
     {
         var cpu = CreateCpu();
@@ -601,6 +622,40 @@ public class Hp3000IsaTests
         
         Assert.True(result);
         Assert.Equal(200, cpu.Pc);
+    }
+
+    [Fact]
+    public void TryExecuteWord_Bro_WithOddTop_ShouldBranchAndPop()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        cpu.Pc = 100;
+        cpu.Sta = 0x0400;
+        cpu.Push(0x8001);
+
+        var result = isa.TryExecuteWord(0x1782, cpu);
+
+        Assert.True(result);
+        Assert.Equal(101, cpu.Pc);
+        Assert.Equal(0, cpu.Sr);
+        Assert.Equal(0x0400, cpu.Sta);
+    }
+
+    [Fact]
+    public void TryExecuteWord_Bro_WithEvenTop_ShouldNotBranchAndPop()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        cpu.Pc = 100;
+        cpu.Sta = 0x0100;
+        cpu.Push(0x0001);
+
+        var result = isa.TryExecuteWord(0x1782, cpu);
+
+        Assert.True(result);
+        Assert.Equal(100, cpu.Pc);
+        Assert.Equal(0, cpu.Sr);
+        Assert.Equal(0x0100, cpu.Sta);
     }
 
     [Fact]

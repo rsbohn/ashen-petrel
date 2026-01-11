@@ -75,6 +75,7 @@ Overflow/carry branches use separate short formats:
 - `BNOV P+2` → `013102` (branch on no overflow, clears O)
 - `BCY P+2` → `011402` (branch on carry, clears C)
 - `BNCY P+2` → `011502` (branch on no carry, clears C)
+- `BRO P+2` → `013602` (branch on odd TOS, pops TOS)
 
 ## Full-Word Instructions
 
