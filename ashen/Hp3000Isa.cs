@@ -141,6 +141,17 @@ namespace Ashen
                         cpu.Push(0);
                         return true;
                     }
+                case 0x0008: // DCMP
+                    {
+                        var a = cpu.Pop();
+                        var b = cpu.Pop();
+                        var c = cpu.Pop();
+                        var d = cpu.Pop();
+                        var right = (uint)(((uint)b << 16) | a);
+                        var left = (uint)(((uint)d << 16) | c);
+                        UpdateDoubleCompareFlags(cpu, left, right);
+                        return true;
+                    }
                 case 0x0009: // DADD
                     {
                         var a = cpu.Pop();
@@ -314,9 +325,8 @@ namespace Ashen
 
         public bool TryExecuteWord(ushort word, Hp3000Cpu cpu)
         {
-            if (word == HaltWord)
+            if (TryExecuteSpecial(word, cpu))
             {
-                cpu.Halt("HALT");
                 return true;
             }
 
@@ -466,7 +476,7 @@ namespace Ashen
             if ((word & BroMask) == BroBase)
             {
                 var value = cpu.Pop();
-                if ((value & 0x8000) != 0)
+                if ((value & 0x0001) != 0)
                 {
                     var offset = word & BroDispMask;
                     var instructionAddress = (cpu.Pc - 1) & 0x7fff;
@@ -574,6 +584,11 @@ namespace Ashen
 
         public string Disassemble(ushort opcode)
         {
+            if (TryDisassembleSpecial(opcode, out var special))
+            {
+                return special;
+            }
+
             if (opcode == HaltWord)
             {
                 return "HALT 0";
@@ -645,8 +660,8 @@ namespace Ashen
                 return DisassembleLoad(opcode);
             }
 
-            var firstOpcode = (ushort)(opcode & 0x003f);
-            var secondOpcode = (ushort)((opcode >> 6) & 0x003f);
+            var firstOpcode = (ushort)((opcode >> 6) & 0x003f);
+            var secondOpcode = (ushort)(opcode & 0x003f);
             var firstMnemonic = _mnemonics.TryGetValue(firstOpcode, out var first)
                 ? first
                 : $"DATA {ToOctal6(firstOpcode)}";
@@ -781,7 +796,122 @@ namespace Ashen
                 return TryAssembleImmediate(operand, ImmediateLdXiBase, out opcode);
             }
 
+            if (mnemonic.Equals("WIO", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseOctal(operand, out var device) || device > 0x0F)
+                {
+                    opcode = 0;
+                    return false;
+                }
+
+                opcode = (ushort)(0x3000 | (0x09 << 4) | device);
+                return true;
+            }
+
+            if (mnemonic.Equals("RIO", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryParseOctal(operand, out var device) || device > 0x0F)
+                {
+                    opcode = 0;
+                    return false;
+                }
+
+                opcode = (ushort)(0x3000 | (0x08 << 4) | device);
+                return true;
+            }
+
             opcode = 0;
+            return false;
+        }
+
+        private static bool TryExecuteSpecial(ushort word, Hp3000Cpu cpu)
+        {
+            if ((word & 0xFC00) != 0x3000)
+            {
+                return false;
+            }
+
+            var opcode = (ushort)((word >> 4) & 0x3F);
+            var deviceCode = (ushort)(word & 0x000F);
+            switch (opcode)
+            {
+                case 0x0F: // HALT 0
+                    cpu.Halt("HALT");
+                    return true;
+                case 0x08: // RIO
+                    return ExecuteRio(cpu, deviceCode);
+                case 0x09: // WIO
+                    return ExecuteWio(cpu, deviceCode);
+            }
+
+            return false;
+        }
+
+        private static bool ExecuteWio(Hp3000Cpu cpu, ushort deviceCode)
+        {
+            if (!cpu.TryReadIoStatus(deviceCode, out var status))
+            {
+                cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | StatusCcl);
+                return true;
+            }
+
+            if ((status & 0x0002) != 0)
+            {
+                var value = cpu.Pop();
+                cpu.WriteIoWord(deviceCode, value);
+                cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | StatusCce);
+                return true;
+            }
+
+            cpu.Push(status);
+            cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | StatusCcg);
+            return true;
+        }
+
+        private static bool ExecuteRio(Hp3000Cpu cpu, ushort deviceCode)
+        {
+            if (!cpu.TryReadIoStatus(deviceCode, out var status))
+            {
+                cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | StatusCcl);
+                return true;
+            }
+
+            if ((status & 0x0002) != 0)
+            {
+                var value = cpu.ReadIoByte(deviceCode);
+                cpu.Push(value);
+                cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | StatusCce);
+                return true;
+            }
+
+            cpu.Push(status);
+            cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | StatusCcg);
+            return true;
+        }
+
+        private static bool TryDisassembleSpecial(ushort word, out string disassembly)
+        {
+            disassembly = string.Empty;
+            if ((word & 0xFC00) != 0x3000)
+            {
+                return false;
+            }
+
+            var opcode = (ushort)((word >> 4) & 0x3F);
+            var deviceCode = (ushort)(word & 0x000F);
+            switch (opcode)
+            {
+                case 0x0F:
+                    disassembly = "HALT 0";
+                    return true;
+                case 0x08:
+                    disassembly = $"RIO {Convert.ToString(deviceCode, 8)}";
+                    return true;
+                case 0x09:
+                    disassembly = $"WIO {Convert.ToString(deviceCode, 8)}";
+                    return true;
+            }
+
             return false;
         }
 
@@ -1533,6 +1663,18 @@ namespace Ashen
             var updated = (ushort)(cpu.Sta & ~StatusCcMask);
             updated |= cc;
             cpu.Sta = updated;
+        }
+
+        private static void UpdateDoubleCompareFlags(Hp3000Cpu cpu, uint left, uint right)
+        {
+            var leftSigned = unchecked((int)left);
+            var rightSigned = unchecked((int)right);
+            var cc = leftSigned == rightSigned
+                ? StatusCce
+                : leftSigned < rightSigned
+                    ? StatusCcl
+                    : StatusCcg;
+            cpu.Sta = (ushort)((cpu.Sta & ~StatusCcMask) | cc);
         }
 
         private static bool IsAddOverflow(ushort b, ushort a, ushort result)

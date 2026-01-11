@@ -13,6 +13,7 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `NOP` | 000000 | No operation. Does nothing. |
 | `DELB` | 000001 | Delete B. Drops the second stack word. |
 | `DDEL` | 000002 | Double delete. Pops two values from stack. |
+| `DCMP` | 000010 | Double compare: (D,C) vs (B,A) sets CC and pops both. |
 | `DADD` | 000011 | Double add: (D,C) + (B,A) → (B,A). |
 | `ZERO` | 000006 | Push a zero onto the stack. |
 | `DZRO` | 000007 | Push two zeros onto the stack. |
@@ -75,7 +76,7 @@ Overflow/carry branches use separate short formats:
 - `BNOV P+2` → `013102` (branch on no overflow, clears O)
 - `BCY P+2` → `011402` (branch on carry, clears C)
 - `BNCY P+2` → `011502` (branch on no carry, clears C)
-- `BRO P+2` → `013602` (branch on odd TOS, pops TOS)
+- `BRO P+2` → `013602` (branch on odd value, pops TOS)
 
 ## Full-Word Instructions
 
@@ -86,12 +87,16 @@ Overflow/carry branches use separate short formats:
 | `LOAD` | `040007` | Load word at P±disp (optional ,I/,X) onto stack. |
 | `STOR` | `051000` | Store TOS at DB+disp (optional ,I/,X). |
 | `HALT` | `030360` | Halt execution. |
+| `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS low byte. |
+| `RIO` | `0301KK` | Read I/O; K (4-bit device code), pushes low byte. |
+
+Device codes: `0` = `tty`, `1` = `lpt`.
 
 ## Complete Format 2 Opcode Table
 
 Format 2 opcodes are listed below as octal values from `000` to `077`. They are
-packed two per word, and `step` executes them sequentially (first opcode, then
-the second opcode). **Bold** opcodes are fully implemented.
+packed two per word, and `step` executes them sequentially (high 6 bits first,
+then low 6 bits). **Bold** opcodes are fully implemented.
 
 ## Register Notes
 
@@ -117,7 +122,7 @@ Ashen currently models `P`, `DB`, `X`, and `STA`, plus the register stack
 | 005 | DECX | - | 045 | **DUP** | ✓ |
 | 006 | **ZERO** | ✓ | 046 | **DDUP** | ✓ |
 | 007 | **DZRO** | ✓ | 047 | FLT | - |
-| 010 | DCMP | - | 050 | FCMP | - |
+| 010 | **DCMP** | ✓ | 050 | FCMP | - |
 | 011 | **DADD** | ✓ | 051 | FADD | - |
 | 012 | DSUB | - | 052 | FSUB | - |
 | 013 | MPYL | - | 053 | FMPY | - |

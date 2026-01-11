@@ -9,8 +9,8 @@ namespace Ashen
         public static void Main(string[] args)
         {
             var memory = new Hp3000Memory(DefaultMemoryWords);
-            var ioBus = new Hp3000IoBus();
             var devices = new DeviceRegistry();
+            var ioBus = new Hp3000IoBus(devices);
 
             devices.Add("tty", new ConsoleTtyDevice());
             devices.Add("lpt", new LinePrinterDevice("./media/print.out"));

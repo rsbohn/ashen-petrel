@@ -7,8 +7,8 @@ public class Hp3000IsaTests
     private Hp3000Cpu CreateCpu()
     {
         var memory = new Hp3000Memory(0x8000);
-        var ioBus = new Hp3000IoBus();
         var devices = new DeviceRegistry();
+        var ioBus = new Hp3000IoBus(devices);
         return new Hp3000Cpu(memory, ioBus, devices);
     }
 
@@ -79,6 +79,39 @@ public class Hp3000IsaTests
         Assert.Equal(2, cpu.Sr);
         Assert.Equal(0x0000, cpu.Ra);
         Assert.Equal(0x0005, cpu.Rb);
+    }
+
+    [Fact]
+    public void Dcmp_ShouldSetCcAndPopDoublewords()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        cpu.Sta = 0x0C00;
+
+        cpu.Push(0x0000); // D high (left)
+        cpu.Push(0x0002); // C low (left)
+        cpu.Push(0x0000); // B high (right)
+        cpu.Push(0x0001); // A low (right)
+        isa.TryExecute(0x0008, cpu);
+
+        Assert.Equal(0, cpu.Sr);
+        Assert.Equal(0x0000, cpu.Sta & 0x0300);
+        Assert.Equal(0x0C00, cpu.Sta & 0x0C00);
+    }
+
+    [Fact]
+    public void Dcmp_Equal_ShouldSetCce()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x1234);
+        cpu.Push(0x0000);
+        cpu.Push(0x1234);
+        cpu.Push(0x0000);
+        isa.TryExecute(0x0008, cpu);
+
+        Assert.Equal(0x0200, cpu.Sta & 0x0300);
     }
 
     [Fact]
@@ -501,6 +534,28 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void TryAssemble_Wio_ShouldAssemble()
+    {
+        var isa = new Hp3000Isa();
+
+        var result = isa.TryAssemble("WIO", "01", out var opcode);
+
+        Assert.True(result);
+        Assert.Equal(0x3091, opcode);
+    }
+
+    [Fact]
+    public void TryAssemble_Rio_ShouldAssemble()
+    {
+        var isa = new Hp3000Isa();
+
+        var result = isa.TryAssemble("RIO", "17", out var opcode);
+
+        Assert.True(result);
+        Assert.Equal(0x308F, opcode);
+    }
+
+    [Fact]
     public void TryAssemble_Bcc_Mnemonics_ShouldMatchOpcodes()
     {
         var isa = new Hp3000Isa();
@@ -571,6 +626,26 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Disassemble_Wio_ShouldReturnMnemonic()
+    {
+        var isa = new Hp3000Isa();
+
+        var disassembly = isa.Disassemble(0x3091);
+
+        Assert.Equal("WIO 1", disassembly);
+    }
+
+    [Fact]
+    public void Disassemble_Rio_ShouldReturnMnemonic()
+    {
+        var isa = new Hp3000Isa();
+
+        var disassembly = isa.Disassemble(0x308F);
+
+        Assert.Equal("RIO 17", disassembly);
+    }
+
+    [Fact]
     public void TryExecuteWord_Branch_Forward()
     {
         var cpu = CreateCpu();
@@ -631,7 +706,7 @@ public class Hp3000IsaTests
         var isa = new Hp3000Isa();
         cpu.Pc = 100;
         cpu.Sta = 0x0400;
-        cpu.Push(0x8001);
+        cpu.Push(0x0001);
 
         var result = isa.TryExecuteWord(0x1782, cpu);
 
@@ -648,7 +723,7 @@ public class Hp3000IsaTests
         var isa = new Hp3000Isa();
         cpu.Pc = 100;
         cpu.Sta = 0x0100;
-        cpu.Push(0x0001);
+        cpu.Push(0x0002);
 
         var result = isa.TryExecuteWord(0x1782, cpu);
 

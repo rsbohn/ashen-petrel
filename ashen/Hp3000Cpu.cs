@@ -129,8 +129,8 @@ namespace Ashen
                 return !Halted;
             }
 
-            var firstOpcode = (ushort)(word & 0x003f);
-            var secondOpcode = (ushort)((word >> 6) & 0x003f);
+            var firstOpcode = (ushort)((word >> 6) & 0x003f);
+            var secondOpcode = (ushort)(word & 0x003f);
 
             if (!_isa.TryExecute(firstOpcode, this))
             {
@@ -181,6 +181,26 @@ namespace Ashen
         public void WriteWord(int address, ushort value)
         {
             _memory.Write(address, value);
+        }
+
+        public void WriteIoByte(ushort deviceCode, byte value)
+        {
+            _ioBus.WriteWord(deviceCode, value);
+        }
+
+        public void WriteIoWord(ushort deviceCode, ushort value)
+        {
+            _ioBus.WriteWord(deviceCode, value);
+        }
+
+        public byte ReadIoByte(ushort deviceCode)
+        {
+            return _ioBus.ReadByte(deviceCode);
+        }
+
+        public bool TryReadIoStatus(ushort deviceCode, out ushort status)
+        {
+            return _ioBus.TryReadStatus(deviceCode, out status);
         }
 
         public void Halt(string? message = null)

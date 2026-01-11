@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 
 namespace Ashen
@@ -23,6 +24,21 @@ namespace Ashen
         int BlockWords { get; }
         void ReadBlock(int block, Hp3000Memory memory, int address);
         void WriteBlock(int block, Hp3000Memory memory, int address);
+    }
+
+    internal interface IByteOutputDevice : IDevice
+    {
+        void WriteByte(byte value);
+    }
+
+    internal interface IWordOutputDevice : IDevice
+    {
+        void WriteWord(ushort value);
+    }
+
+    internal interface IDeviceStatusWord : IDevice
+    {
+        ushort ReadStatusWord();
     }
 
     internal sealed class DeviceRegistry
@@ -60,9 +76,13 @@ namespace Ashen
         }
     }
 
-    internal sealed class LinePrinterDevice : IAttachableDevice
+    internal sealed class LinePrinterDevice : IAttachableDevice, IByteOutputDevice, IWordOutputDevice
     {
         private string _path;
+        private int _columns = 80;
+        private int _columnPos;
+        private char _radix = '0';
+        private int _radixWordsOnLine;
 
         public LinePrinterDevice(string defaultPath)
         {
@@ -72,6 +92,8 @@ namespace Ashen
         public string Name => "Line Printer";
         public bool IsAttached => true;
         public string? Path => _path;
+        public int Columns => _columns;
+        public char Radix => _radix;
 
         public void Attach(string path, bool createNew)
         {
@@ -100,9 +122,110 @@ namespace Ashen
             File.AppendAllText(_path, text + Environment.NewLine);
         }
 
+        public void SetColumns(int columns)
+        {
+            if (columns != 80 && columns != 128)
+            {
+                throw new ArgumentOutOfRangeException(nameof(columns), "Columns must be 80 or 128.");
+            }
+
+            _columns = columns;
+            _columnPos = 0;
+        }
+
+        public void SetRadix(char radix)
+        {
+            radix = char.ToUpperInvariant(radix);
+            if (radix != '0' && radix != '2' && radix != '8' && radix != 'A' && radix != 'F')
+            {
+                throw new ArgumentOutOfRangeException(nameof(radix), "Radix must be 0, 2, 8, A, or F.");
+            }
+
+            _radix = radix;
+            _radixWordsOnLine = 0;
+            AppendText(Environment.NewLine);
+            _columnPos = 0;
+        }
+
+        public void WriteByte(byte value)
+        {
+            if (value == '\r')
+            {
+                return;
+            }
+
+            if (value == '\n')
+            {
+                AppendText(Environment.NewLine);
+                _columnPos = 0;
+                return;
+            }
+
+            AppendText(((char)value).ToString());
+            _columnPos++;
+            if (_columnPos >= _columns)
+            {
+                AppendText(Environment.NewLine);
+                _columnPos = 0;
+            }
+        }
+
+        public void WriteWord(ushort value)
+        {
+            switch (_radix)
+            {
+                case '0':
+                    WriteByte((byte)(value & 0xFF));
+                    return;
+                case '2':
+                    WriteBinaryWord(value);
+                    return;
+                case '8':
+                    WriteRadixWord(value, word => Convert.ToString(word, 8).PadLeft(6, '0'));
+                    return;
+                case 'A':
+                    WriteRadixWord(value, word => word.ToString(CultureInfo.InvariantCulture));
+                    return;
+                case 'F':
+                    WriteRadixWord(value, word => $"0x{word:X4}");
+                    return;
+            }
+        }
+
         public string Status()
         {
-            return $"output={_path}";
+            return $"output={_path} cols={_columns} radix={_radix}";
+        }
+
+        private void AppendText(string text)
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path) ?? ".");
+            File.AppendAllText(_path, text);
+        }
+
+        private void WriteBinaryWord(ushort value)
+        {
+            var hi = (byte)(value >> 8);
+            var lo = (byte)(value & 0xFF);
+            var text = $"{Convert.ToString(hi, 2).PadLeft(8, '0')} {Convert.ToString(lo, 2).PadLeft(8, '0')}";
+            AppendText(text);
+            AppendText(Environment.NewLine);
+        }
+
+        private void WriteRadixWord(ushort value, Func<ushort, string> formatter)
+        {
+            if (_radixWordsOnLine > 0)
+            {
+                AppendText(" ");
+            }
+
+            AppendText(formatter(value));
+            _radixWordsOnLine++;
+            if (_radixWordsOnLine >= 8)
+            {
+                AppendText(Environment.NewLine);
+                _radixWordsOnLine = 0;
+            }
         }
     }
 

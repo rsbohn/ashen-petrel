@@ -13,6 +13,7 @@ namespace Ashen
         private readonly DeviceRegistry _devices;
         private readonly Hp3000Isa _isa;
         private readonly HashSet<int> _breakpoints = new();
+        private readonly HashSet<int> _watches = new();
         private readonly Dictionary<string, Action<TokenStream>> _words;
         private bool _quit;
 
@@ -118,6 +119,11 @@ namespace Ashen
                 ["asm"] = Assemble,
                 ["devs"] = _ => ListDevices(),
                 ["status"] = StatusDevice,
+                ["lptcols"] = SetLinePrinterColumns,
+                ["lptradix"] = SetLinePrinterRadix,
+                ["watch"] = AddWatch,
+                ["unwatch"] = RemoveWatch,
+                ["watches"] = ListWatches,
                 ["attach"] = AttachDevice,
                 ["detach"] = DetachDevice,
                 ["readblk"] = ReadBlock,
@@ -129,7 +135,8 @@ namespace Ashen
         {
             Console.WriteLine("Core: help words reset go run step exam deposit dis break breaks asm");
             Console.WriteLine("Stack: . dup drop swap over + - and or xor invert ! @");
-            Console.WriteLine("Devices: devs status attach detach readblk writeblk");
+            Console.WriteLine("Devices: devs status attach detach readblk writeblk lptcols lptradix");
+            Console.WriteLine("Watch: watch unwatch watches");
             Console.WriteLine("Numbers are octal; use # for decimal.");
             Console.WriteLine("Assembler: asm <mnemonic> [addr] | asm <file>");
         }
@@ -138,6 +145,48 @@ namespace Ashen
         {
             var words = _words.Keys.OrderBy(word => word);
             Console.WriteLine(string.Join(" ", words));
+        }
+
+        private void AddWatch(TokenStream stream)
+        {
+            if (!stream.TryNextNumber(out var address))
+            {
+                Console.WriteLine("watch <addr>");
+                return;
+            }
+
+            address &= 0x7fff;
+            if (_watches.Add(address))
+            {
+                Console.WriteLine($"watch {ToOctal(address)}");
+            }
+        }
+
+        private void RemoveWatch(TokenStream stream)
+        {
+            if (!stream.TryNextNumber(out var address))
+            {
+                Console.WriteLine("unwatch <addr>");
+                return;
+            }
+
+            address &= 0x7fff;
+            if (_watches.Remove(address))
+            {
+                Console.WriteLine($"unwatch {ToOctal(address)}");
+            }
+        }
+
+        private void ListWatches(TokenStream _)
+        {
+            if (_watches.Count == 0)
+            {
+                Console.WriteLine("watches: (none)");
+                return;
+            }
+
+            var ordered = _watches.OrderBy(addr => addr).Select(ToOctal);
+            Console.WriteLine($"watches: {string.Join(" ", ordered)}");
         }
 
         private void PrintTop()
@@ -254,11 +303,13 @@ namespace Ashen
             var ran = 0;
             for (var i = 0; i < steps; i++)
             {
+                var watchSnapshot = CaptureWatchSnapshot();
                 if (!_cpu.Step())
                 {
                     break;
                 }
 
+                ReportWatchChanges(watchSnapshot);
                 ran++;
             }
 
@@ -385,6 +436,7 @@ namespace Ashen
             }
 
             if (token.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("BRO", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LDI", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
@@ -553,7 +605,7 @@ namespace Ashen
                         return;
                     }
 
-                    var packed = (ushort)((secondOpcode << 6) | firstOpcode);
+                    var packed = (ushort)((firstOpcode << 6) | secondOpcode);
                     _memory.Write(asmLine.Address, packed);
                     assembled++;
                     continue;
@@ -772,6 +824,12 @@ namespace Ashen
                 return true;
             }
 
+            if (TryResolveSymbolOrDot(basePart, address, symbols, out var resolvedValue))
+            {
+                resolved = Convert.ToString(resolvedValue, 8);
+                return true;
+            }
+
             if (basePart.StartsWith("P", StringComparison.OrdinalIgnoreCase))
             {
                 resolved = basePart;
@@ -786,18 +844,12 @@ namespace Ashen
                 }
             }
 
-            if (TryResolveSymbolOrDot(basePart, address, symbols, out var value))
-            {
-                resolved = Convert.ToString(value, 8);
-                return true;
-            }
-
             var plusIndex = basePart.IndexOf('+');
             if (plusIndex > 0 && plusIndex < basePart.Length - 1)
             {
                 var prefix = basePart[..(plusIndex + 1)];
                 var label = basePart[(plusIndex + 1)..].Trim();
-                if (TryResolveSymbolOrDot(label, address, symbols, out value))
+                if (TryResolveSymbolOrDot(label, address, symbols, out var value))
                 {
                     resolved = prefix + Convert.ToString(value, 8);
                     return true;
@@ -809,7 +861,7 @@ namespace Ashen
             {
                 var prefix = basePart[..(minusIndex + 1)];
                 var label = basePart[(minusIndex + 1)..].Trim();
-                if (TryResolveSymbolOrDot(label, address, symbols, out value))
+                if (TryResolveSymbolOrDot(label, address, symbols, out var value))
                 {
                     resolved = prefix + Convert.ToString(value, 8);
                     return true;
@@ -885,6 +937,7 @@ namespace Ashen
         private static bool IsOperandMnemonic(string mnemonic)
         {
             return mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BRO", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase)
@@ -897,6 +950,8 @@ namespace Ashen
                 || mnemonic.Equals("BNOV", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BCY", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BNCY", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("WIO", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("RIO", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LDI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
@@ -910,6 +965,7 @@ namespace Ashen
         private static bool IsRelativeMnemonic(string mnemonic)
         {
             return mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("BRO", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BN", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BL", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("BE", StringComparison.OrdinalIgnoreCase)
@@ -1003,6 +1059,77 @@ namespace Ashen
             Console.WriteLine($"{name}: {device.Status()}");
         }
 
+        private void SetLinePrinterColumns(TokenStream stream)
+        {
+            if (!stream.TryNextNumber(out var cols))
+            {
+                Console.WriteLine("lptcols <80|128>");
+                return;
+            }
+
+            if (!_devices.TryGet("lpt", out var device) || device is not LinePrinterDevice printer)
+            {
+                Console.WriteLine("lptcols: device 'lpt' not available");
+                return;
+            }
+
+            if (cols != 80 && cols != 128)
+            {
+                Console.WriteLine("lptcols: columns must be 80 or 128");
+                return;
+            }
+
+            printer.SetColumns(cols);
+            Console.WriteLine($"lptcols {cols}");
+        }
+
+        private void SetLinePrinterRadix(TokenStream stream)
+        {
+            if (!stream.TryNext(out var token))
+            {
+                Console.WriteLine("lptradix <0|2|8|A|F>");
+                return;
+            }
+
+            if (!_devices.TryGet("lpt", out var device) || device is not LinePrinterDevice printer)
+            {
+                Console.WriteLine("lptradix: device 'lpt' not available");
+                return;
+            }
+
+            var radix = NormalizeRadixToken(token);
+            if (radix == '\0')
+            {
+                Console.WriteLine("lptradix: radix must be 0, 2, 8, A, or F");
+                return;
+            }
+
+            printer.SetRadix(radix);
+            Console.WriteLine($"lptradix {radix}");
+        }
+
+        private static char NormalizeRadixToken(string token)
+        {
+            token = token.Trim();
+            if (token.Length == 1)
+            {
+                var ch = char.ToUpperInvariant(token[0]);
+                if (ch == '0' || ch == '2' || ch == '8' || ch == 'A' || ch == 'F')
+                {
+                    return ch;
+                }
+            }
+
+            if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                if (value == 0 || value == 2 || value == 8)
+                {
+                    return (char)('0' + value);
+                }
+            }
+
+            return '\0';
+        }
         private void AttachDevice(TokenStream stream)
         {
             if (!stream.TryNext(out var name) || !stream.TryNext(out var path))
@@ -1086,6 +1213,39 @@ namespace Ashen
 
             blockDevice.WriteBlock(block, _memory, address);
             Console.WriteLine($"wrote {name} block {ToOctal(block)} from {ToOctal(address)}");
+        }
+
+        private Dictionary<int, ushort> CaptureWatchSnapshot()
+        {
+            if (_watches.Count == 0)
+            {
+                return new Dictionary<int, ushort>();
+            }
+
+            var snapshot = new Dictionary<int, ushort>(_watches.Count);
+            foreach (var address in _watches)
+            {
+                snapshot[address] = _memory.Read(address);
+            }
+
+            return snapshot;
+        }
+
+        private void ReportWatchChanges(Dictionary<int, ushort> snapshot)
+        {
+            if (snapshot.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var (address, before) in snapshot)
+            {
+                var after = _memory.Read(address);
+                if (after != before)
+                {
+                    Console.WriteLine($"watch {ToOctal(address)}: {ToOctal(before)} -> {ToOctal(after)}");
+                }
+            }
         }
 
         private void RequireStack(int count)
