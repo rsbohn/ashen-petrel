@@ -23,6 +23,7 @@ The line printer supports multiple radix modes for WIO-driven output:
 - `2`: Binary `hhhhhhhh llllllll` (high byte then low byte), one word per line.
 - `8`: Octal `000000` with space-separated words, eight words per line.
 - `A`: Decimal `0..65535` with space-separated words, eight words per line.
+- `D`: Decimal `0..4294967295` from two words (high then low), eight values per line.
 - `F`: Hexadecimal `0x0000..0xFFFF` with space-separated words, eight words per line.
 
 Use the monitor command `lptradix <0|2|8|A|F>` to change modes.

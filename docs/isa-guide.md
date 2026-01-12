@@ -21,6 +21,8 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `SUB` | 000021 | Subtract: b - a → result. |
 | `MPY` | 000022 | Multiply: b * a → result. |
 | `DIV` | 000023 | Divide: b / a → quotient, remainder on TOS. |
+| `LDIV` | 000063 | Long divide: (C,B) / A → quotient, remainder on TOS. |
+| `DIVL` | 000014 | Long divide: (C,B) / A → quotient, remainder on TOS. |
 | `NEG` | 000024 | Negate top of stack. |
 | `TEST` | 000025 | Set CC based on top of stack. |
 | `XCH` | 000032 | Exchange top two stack items. |
@@ -86,6 +88,9 @@ Overflow/carry branches use separate short formats:
 | `LDXI` | `021777` | Load immediate (8-bit) into X. |
 | `LOAD` | `040007` | Load word at P±disp (optional ,I/,X) onto stack. |
 | `STOR` | `051000` | Store TOS at DB+disp (optional ,I/,X). |
+| `LDD` | `151076` | Load double at DB+disp, push *DB+disp then *DB+disp+1. |
+| `STD` | `161076` | Store double at DB+disp, store TOS+1 then TOS. |
+| `DDIV` | `020571` | Double divide: (D,C)/(B,A) → quotient (D,C), remainder (B,A). |
 | `HALT` | `030360` | Halt execution. |
 | `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS word. |
 | `RIO` | `0301KK` | Read I/O; K (4-bit device code), pushes low byte. |
@@ -118,22 +123,22 @@ Ashen currently models `P`, `DB`, `X`, and `STA`, plus the register stack
 | 001 | **DELB** | ✓ | 041 | ZROB | - |
 | 002 | **DDEL** | ✓ | 042 | **LDXB** | ✓ |
 | 003 | ZROX | - | 043 | **STAX** | ✓ |
-| 004 | INCX | - | 044 | **LDXA** | ✓ |
-| 005 | DECX | - | 045 | **DUP** | ✓ |
+| 004 | **INCX** | ✓ | 044 | **LDXA** | ✓ |
+| 005 | **DECX** | ✓ | 045 | **DUP** | ✓ |
 | 006 | **ZERO** | ✓ | 046 | **DDUP** | ✓ |
 | 007 | **DZRO** | ✓ | 047 | FLT | - |
 | 010 | **DCMP** | ✓ | 050 | FCMP | - |
 | 011 | **DADD** | ✓ | 051 | FADD | - |
 | 012 | DSUB | - | 052 | FSUB | - |
 | 013 | MPYL | - | 053 | FMPY | - |
-| 014 | DIVL | - | 054 | FDIV | - |
+| 014 | **DIVL** | ✓ | 054 | FDIV | - |
 | 015 | DNEG | - | 055 | FNEG | - |
 | 016 | DXCH | - | 056 | CAB | - |
 | 017 | CMP | - | 057 | LCMP | - |
 | 020 | **ADD** | ✓ | 060 | LADD | - |
 | 021 | **SUB** | ✓ | 061 | LSUB | - |
 | 022 | **MPY** | ✓ | 062 | LMPY | - |
-| 023 | **DIV** | ✓ | 063 | LDIV | - |
+| 023 | **DIV** | ✓ | 063 | **LDIV** | ✓ |
 | 024 | **NEG** | ✓ | 064 | **NOT** | ✓ |
 | 025 | **TEST** | ✓ | 065 | **OR** | ✓ |
 | 026 | **STBX** | ✓ | 066 | **XOR** | ✓ |

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace Ashen
 {
@@ -15,6 +16,8 @@ namespace Ashen
         private readonly HashSet<int> _breakpoints = new();
         private readonly HashSet<int> _watches = new();
         private readonly Dictionary<string, Action<TokenStream>> _words;
+        private Dictionary<string, int>? _lastSymbols;
+        private string? _lastAsmPath;
         private bool _quit;
 
         public Hp3000Monitor(Hp3000Cpu cpu, Hp3000Memory memory, DeviceRegistry devices)
@@ -113,10 +116,13 @@ namespace Ashen
                 ["deposit"] = DepositMemory,
                 ["dep"] = DepositMemory,
                 ["d"] = DepositMemory,
+                ["txt"] = StoreText,
                 ["dis"] = Disassemble,
                 ["break"] = SetBreak,
                 ["breaks"] = _ => ListBreaks(),
                 ["asm"] = Assemble,
+                ["&asm"] = _ => ReassembleLastFile(),
+                ["syms"] = _ => ListSymbols(),
                 ["devs"] = _ => ListDevices(),
                 ["status"] = StatusDevice,
                 ["lptcols"] = SetLinePrinterColumns,
@@ -133,18 +139,45 @@ namespace Ashen
 
         private void ShowHelp()
         {
-            Console.WriteLine("Core: help words reset go run step exam deposit dis break breaks asm");
+            Console.WriteLine("Core: help words reset go run step exam deposit dis break breaks asm &asm syms txt");
             Console.WriteLine("Stack: . dup drop swap over + - and or xor invert ! @");
             Console.WriteLine("Devices: devs status attach detach readblk writeblk lptcols lptradix");
             Console.WriteLine("Watch: watch unwatch watches");
             Console.WriteLine("Numbers are octal; use # for decimal.");
-            Console.WriteLine("Assembler: asm <mnemonic> [addr] | asm <file>");
+            Console.WriteLine("Assembler: asm <mnemonic> [addr] | asm <file> | &asm | syms");
+            Console.WriteLine("Memory: txt <addr> /text/ (writes ASCII bytes + 0 terminator)");
         }
 
         private void ListWords()
         {
             var words = _words.Keys.OrderBy(word => word);
             Console.WriteLine(string.Join(" ", words));
+        }
+
+        private void ReassembleLastFile()
+        {
+            if (string.IsNullOrWhiteSpace(_lastAsmPath))
+            {
+                Console.WriteLine("asm: no previous file");
+                return;
+            }
+
+            AssembleFile(_lastAsmPath);
+        }
+
+        private void ListSymbols()
+        {
+            if (_lastSymbols == null || _lastSymbols.Count == 0)
+            {
+                Console.WriteLine("syms: (none)");
+                return;
+            }
+
+            Console.WriteLine($"syms: {_lastAsmPath ?? "(unknown)"}");
+            foreach (var entry in _lastSymbols.OrderBy(entry => entry.Value).ThenBy(entry => entry.Key))
+            {
+                Console.WriteLine($"{entry.Key} {ToOctal(entry.Value)}");
+            }
         }
 
         private void AddWatch(TokenStream stream)
@@ -387,6 +420,39 @@ namespace Ashen
             }
         }
 
+        private void StoreText(TokenStream stream)
+        {
+            if (!stream.TryNextNumber(out var address))
+            {
+                Console.WriteLine("txt <addr> /text/");
+                return;
+            }
+
+            if (!stream.TryNext(out var token))
+            {
+                Console.WriteLine("txt <addr> /text/");
+                return;
+            }
+
+            if (!TryParseSlashDelimitedText(token, stream, out var text, out var error))
+            {
+                Console.WriteLine($"txt: {error}");
+                return;
+            }
+
+            var start = address & 0x7fff;
+            var current = start;
+            foreach (var ch in text)
+            {
+                _memory.Write(current, (ushort)(ch & 0xFF));
+                current = (current + 1) & 0x7fff;
+            }
+
+            _memory.Write(current, 0);
+            var count = text.Length + 1;
+            Console.WriteLine($"txt {ToOctal(start)} len={ToOctalCount(count)}");
+        }
+
         private void ShowRegs()
         {
             Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} DB={ToOctal(_cpu.Db)} X={ToOctal(_cpu.X)} HALT={(_cpu.Halted ? "1" : "0")}");
@@ -441,6 +507,8 @@ namespace Ashen
                 || token.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("STOR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("LDD", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("STD", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
@@ -553,6 +621,34 @@ namespace Ashen
                     continue;
                 }
 
+                if (mnemonic.Equals("DD", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (operand == null)
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: DD requires at least one value");
+                        return;
+                    }
+
+                    var values = SplitOperands(operand);
+                    lines.Add(new AsmLine(lineNumber, address, "DD", values, line));
+                    address = (address + (values.Count * 2)) & 0x7fff;
+                    continue;
+                }
+
+                if (mnemonic.Equals("DQ", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (operand == null)
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: DQ requires at least one value");
+                        return;
+                    }
+
+                    var values = SplitOperands(operand);
+                    lines.Add(new AsmLine(lineNumber, address, "DQ", values, line));
+                    address = (address + (values.Count * 4)) & 0x7fff;
+                    continue;
+                }
+
                 lines.Add(new AsmLine(lineNumber, address, mnemonic, operand, line));
                 address = (address + 1) & 0x7fff;
             }
@@ -574,6 +670,52 @@ namespace Ashen
                         _memory.Write(writeAddress, (ushort)value);
                         writeAddress = (writeAddress + 1) & 0x7fff;
                         assembled++;
+                    }
+
+                    continue;
+                }
+
+                if (asmLine.Mnemonic.Equals("DD", StringComparison.OrdinalIgnoreCase))
+                {
+                    var writeAddress = asmLine.Address;
+                    foreach (var valueToken in asmLine.Values)
+                    {
+                        if (!TryResolveValue32(valueToken, symbols, writeAddress, out var value))
+                        {
+                            Console.WriteLine($"asm {path}:{asmLine.LineNumber}: invalid literal '{valueToken}'");
+                            return;
+                        }
+
+                        _memory.Write(writeAddress, (ushort)(value >> 16));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        _memory.Write(writeAddress, (ushort)(value & 0xffff));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        assembled += 2;
+                    }
+
+                    continue;
+                }
+
+                if (asmLine.Mnemonic.Equals("DQ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var writeAddress = asmLine.Address;
+                    foreach (var valueToken in asmLine.Values)
+                    {
+                        if (!TryResolveValue64(valueToken, symbols, writeAddress, out var value))
+                        {
+                            Console.WriteLine($"asm {path}:{asmLine.LineNumber}: invalid literal '{valueToken}'");
+                            return;
+                        }
+
+                        _memory.Write(writeAddress, (ushort)(value >> 48));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        _memory.Write(writeAddress, (ushort)((value >> 32) & 0xffff));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        _memory.Write(writeAddress, (ushort)((value >> 16) & 0xffff));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        _memory.Write(writeAddress, (ushort)(value & 0xffff));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        assembled += 4;
                     }
 
                     continue;
@@ -645,6 +787,8 @@ namespace Ashen
             }
 
             Console.WriteLine($"assembled {ToOctal(assembled)} words ORG={ToOctal(origin)}");
+            _lastSymbols = new Dictionary<string, int>(symbols, StringComparer.OrdinalIgnoreCase);
+            _lastAsmPath = path;
         }
 
         private static string StripComment(string line)
@@ -849,6 +993,11 @@ namespace Ashen
             {
                 var prefix = basePart[..(plusIndex + 1)];
                 var label = basePart[(plusIndex + 1)..].Trim();
+                if (TryParseNumber(label, out var number))
+                {
+                    resolved = prefix + Convert.ToString(number, 8);
+                    return true;
+                }
                 if (TryResolveSymbolOrDot(label, address, symbols, out var value))
                 {
                     resolved = prefix + Convert.ToString(value, 8);
@@ -861,6 +1010,11 @@ namespace Ashen
             {
                 var prefix = basePart[..(minusIndex + 1)];
                 var label = basePart[(minusIndex + 1)..].Trim();
+                if (TryParseNumber(label, out var number))
+                {
+                    resolved = prefix + Convert.ToString(number, 8);
+                    return true;
+                }
                 if (TryResolveSymbolOrDot(label, address, symbols, out var value))
                 {
                     resolved = prefix + Convert.ToString(value, 8);
@@ -934,6 +1088,52 @@ namespace Ashen
             return false;
         }
 
+        private static bool TryResolveValue32(string token, Dictionary<string, int> symbols, int address, out uint value)
+        {
+            if (TryParseNumber32(token, out value))
+            {
+                return true;
+            }
+
+            if (token == ".")
+            {
+                value = (uint)address;
+                return true;
+            }
+
+            if (symbols.TryGetValue(token, out var symbolValue))
+            {
+                value = (uint)symbolValue;
+                return true;
+            }
+
+            value = 0;
+            return false;
+        }
+
+        private static bool TryResolveValue64(string token, Dictionary<string, int> symbols, int address, out ulong value)
+        {
+            if (TryParseNumber64(token, out value))
+            {
+                return true;
+            }
+
+            if (token == ".")
+            {
+                value = (ulong)address;
+                return true;
+            }
+
+            if (symbols.TryGetValue(token, out var symbolValue))
+            {
+                value = (ulong)symbolValue;
+                return true;
+            }
+
+            value = 0;
+            return false;
+        }
+
         private static bool IsOperandMnemonic(string mnemonic)
         {
             return mnemonic.Equals("BR", StringComparison.OrdinalIgnoreCase)
@@ -956,6 +1156,8 @@ namespace Ashen
                 || mnemonic.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("STOR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("LDD", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("STD", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase)
@@ -1087,7 +1289,7 @@ namespace Ashen
         {
             if (!stream.TryNext(out var token))
             {
-                Console.WriteLine("lptradix <0|2|8|A|F>");
+                Console.WriteLine("lptradix <0|2|8|A|D|F>");
                 return;
             }
 
@@ -1100,7 +1302,7 @@ namespace Ashen
             var radix = NormalizeRadixToken(token);
             if (radix == '\0')
             {
-                Console.WriteLine("lptradix: radix must be 0, 2, 8, A, or F");
+                Console.WriteLine("lptradix: radix must be 0, 2, 8, A, D, or F");
                 return;
             }
 
@@ -1114,7 +1316,7 @@ namespace Ashen
             if (token.Length == 1)
             {
                 var ch = char.ToUpperInvariant(token[0]);
-                if (ch == '0' || ch == '2' || ch == '8' || ch == 'A' || ch == 'F')
+                if (ch == '0' || ch == '2' || ch == '8' || ch == 'A' || ch == 'D' || ch == 'F')
                 {
                     return ch;
                 }
@@ -1271,6 +1473,36 @@ namespace Ashen
             return TryParseBase(token, 8, out value);
         }
 
+        private static bool TryParseNumber32(string token, out uint value)
+        {
+            if (token.StartsWith("#", StringComparison.OrdinalIgnoreCase))
+            {
+                return uint.TryParse(token[1..], NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+            }
+
+            if (token.StartsWith("$", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryParseBase32(token[1..], 16, out value);
+            }
+
+            return TryParseBase32(token, 8, out value);
+        }
+
+        private static bool TryParseNumber64(string token, out ulong value)
+        {
+            if (token.StartsWith("#", StringComparison.OrdinalIgnoreCase))
+            {
+                return ulong.TryParse(token[1..], NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+            }
+
+            if (token.StartsWith("$", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryParseBase64(token[1..], 16, out value);
+            }
+
+            return TryParseBase64(token, 8, out value);
+        }
+
         private static bool TryParseBase(string token, int numberBase, out int value)
         {
             try
@@ -1285,9 +1517,74 @@ namespace Ashen
             }
         }
 
+        private static bool TryParseBase32(string token, int numberBase, out uint value)
+        {
+            try
+            {
+                value = Convert.ToUInt32(token, numberBase);
+                return true;
+            }
+            catch (Exception)
+            {
+                value = 0;
+                return false;
+            }
+        }
+
+        private static bool TryParseBase64(string token, int numberBase, out ulong value)
+        {
+            try
+            {
+                value = Convert.ToUInt64(token, numberBase);
+                return true;
+            }
+            catch (Exception)
+            {
+                value = 0;
+                return false;
+            }
+        }
+
         private static string ToOctal(int value)
         {
             return Convert.ToString(value & 0xffff, 8).PadLeft(6, '0');
+        }
+
+        private static bool TryParseSlashDelimitedText(string firstToken, TokenStream stream, out string text, out string error)
+        {
+            text = string.Empty;
+            error = string.Empty;
+
+            if (!firstToken.StartsWith("/", StringComparison.Ordinal))
+            {
+                error = "text must start with /";
+                return false;
+            }
+
+            var builder = new StringBuilder(firstToken);
+            var hasClosing = firstToken.Length >= 2 && firstToken.EndsWith("/", StringComparison.Ordinal);
+            while (!hasClosing)
+            {
+                if (!stream.TryNext(out var next))
+                {
+                    error = "unterminated /text/";
+                    return false;
+                }
+
+                builder.Append(' ');
+                builder.Append(next);
+                hasClosing = next.EndsWith("/", StringComparison.Ordinal);
+            }
+
+            var combined = builder.ToString();
+            if (combined.Length < 2 || combined[0] != '/' || combined[^1] != '/')
+            {
+                error = "text must be delimited as /text/";
+                return false;
+            }
+
+            text = combined[1..^1];
+            return true;
         }
 
         private static List<string> Tokenize(string line)

@@ -66,13 +66,18 @@ namespace Ashen
         }
     }
 
-    internal sealed class ConsoleTtyDevice : IDevice
+    internal sealed class ConsoleTtyDevice : IDevice, IByteOutputDevice
     {
         public string Name => "Console TTY";
 
         public string Status()
         {
             return "ready";
+        }
+
+        public void WriteByte(byte value)
+        {
+            Console.Write((char)value);
         }
     }
 
@@ -83,6 +88,8 @@ namespace Ashen
         private int _columnPos;
         private char _radix = '0';
         private int _radixWordsOnLine;
+        private bool _radixPendingDouble;
+        private ushort _radixHighWord;
 
         public LinePrinterDevice(string defaultPath)
         {
@@ -136,13 +143,14 @@ namespace Ashen
         public void SetRadix(char radix)
         {
             radix = char.ToUpperInvariant(radix);
-            if (radix != '0' && radix != '2' && radix != '8' && radix != 'A' && radix != 'F')
+            if (radix != '0' && radix != '2' && radix != '8' && radix != 'A' && radix != 'D' && radix != 'F')
             {
-                throw new ArgumentOutOfRangeException(nameof(radix), "Radix must be 0, 2, 8, A, or F.");
+                throw new ArgumentOutOfRangeException(nameof(radix), "Radix must be 0, 2, 8, A, D, or F.");
             }
 
             _radix = radix;
             _radixWordsOnLine = 0;
+            _radixPendingDouble = false;
             AppendText(Environment.NewLine);
             _columnPos = 0;
         }
@@ -186,6 +194,9 @@ namespace Ashen
                 case 'A':
                     WriteRadixWord(value, word => word.ToString(CultureInfo.InvariantCulture));
                     return;
+                case 'D':
+                    WriteRadixDoubleWord(value);
+                    return;
                 case 'F':
                     WriteRadixWord(value, word => $"0x{word:X4}");
                     return;
@@ -226,6 +237,32 @@ namespace Ashen
             }
 
             AppendText(formatter(value));
+            _radixWordsOnLine++;
+            if (_radixWordsOnLine >= 8)
+            {
+                AppendText(Environment.NewLine);
+                _radixWordsOnLine = 0;
+            }
+        }
+
+        private void WriteRadixDoubleWord(ushort value)
+        {
+            if (!_radixPendingDouble)
+            {
+                _radixHighWord = value;
+                _radixPendingDouble = true;
+                return;
+            }
+
+            var combined = ((uint)_radixHighWord << 16) | value;
+            _radixPendingDouble = false;
+
+            if (_radixWordsOnLine > 0)
+            {
+                AppendText(" ");
+            }
+
+            AppendText(combined.ToString(CultureInfo.InvariantCulture));
             _radixWordsOnLine++;
             if (_radixWordsOnLine >= 8)
             {

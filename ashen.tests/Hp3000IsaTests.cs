@@ -115,6 +115,40 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Ldd_ShouldPushDoublewordFromDb()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Db = 0x0100;
+        cpu.WriteWord(0x0110, 0x1234);
+        cpu.WriteWord(0x0111, 0xABCD);
+
+        isa.TryExecuteWord((ushort)(0xD200 | 0x0010), cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0xABCD, cpu.Ra);
+        Assert.Equal(0x1234, cpu.Rb);
+    }
+
+    [Fact]
+    public void Std_ShouldStoreDoublewordToDb()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Db = 0x0200;
+        cpu.Push(0xBEEF);
+        cpu.Push(0xCAFE);
+
+        isa.TryExecuteWord((ushort)(0xE200 | 0x0008), cpu);
+
+        Assert.Equal(0, cpu.Sr);
+        Assert.Equal(0xBEEF, cpu.ReadWord(0x0208));
+        Assert.Equal(0xCAFE, cpu.ReadWord(0x0209));
+    }
+
+    [Fact]
     public void Pop_WithSpilledStack_ShouldKeepSrAtFour()
     {
         var cpu = CreateCpu();
@@ -248,6 +282,114 @@ public class Hp3000IsaTests
         Assert.Equal(2, cpu.Sr);
         Assert.Equal(0, cpu.Ra);
         Assert.Equal(0, cpu.Rb);
+    }
+
+    [Fact]
+    public void Divl_ShouldDivideLong()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0002); // C high
+        cpu.Push(0x0000); // B low
+        cpu.Push(0x0003); // A divisor => dividend 0x00020000
+        isa.TryExecute(0x000C, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0002, cpu.Ra); // remainder
+        Assert.Equal(0xAAAA, cpu.Rb); // quotient 0x0000_aaaa
+        Assert.Equal(0x0000, cpu.Sta & 0x0800);
+    }
+
+    [Fact]
+    public void Divl_ByZero_ShouldSetOverflow()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x5678); // C high
+        cpu.Push(0x1234); // B low
+        cpu.Push(0x0000); // A divisor
+        isa.TryExecute(0x000C, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0000, cpu.Ra);
+        Assert.Equal(0x0000, cpu.Rb);
+        Assert.Equal(0x0800, cpu.Sta & 0x0800);
+    }
+
+    [Fact]
+    public void Ddiv_ShouldDivideDoubleword()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0002); // D high dividend
+        cpu.Push(0x0000); // C low dividend
+        cpu.Push(0x0000); // B high divisor
+        cpu.Push(0x0003); // A low divisor => divisor 3
+        isa.TryExecuteWord(0x2179, cpu);
+
+        Assert.Equal(4, cpu.Sr);
+        Assert.Equal(0x0002, cpu.Ra); // remainder low
+        Assert.Equal(0x0000, cpu.Rb); // remainder high
+        Assert.Equal(0xAAAA, cpu.Rc); // quotient low
+        Assert.Equal(0x0000, cpu.Rd); // quotient high
+        Assert.Equal(0x0000, cpu.Sta & 0x0800);
+    }
+
+    [Fact]
+    public void Ddiv_ByZero_ShouldSetOverflow()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0xDEAD); // D high dividend
+        cpu.Push(0xBEEF); // C low dividend
+        cpu.Push(0x0000); // B high divisor
+        cpu.Push(0x0000); // A low divisor
+        isa.TryExecuteWord(0x2179, cpu);
+
+        Assert.Equal(4, cpu.Sr);
+        Assert.Equal(0x0000, cpu.Ra);
+        Assert.Equal(0x0000, cpu.Rb);
+        Assert.Equal(0x0000, cpu.Rc);
+        Assert.Equal(0x0000, cpu.Rd);
+        Assert.Equal(0x0800, cpu.Sta & 0x0800);
+    }
+
+    [Fact]
+    public void Ldiv_ShouldDivideUnsignedLong()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0001); // C high
+        cpu.Push(0x0001); // B low
+        cpu.Push(0x0002); // A divisor => dividend 0x00010001
+        isa.TryExecute(0x0033, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0001, cpu.Ra); // remainder
+        Assert.Equal(0x8000, cpu.Rb); // quotient 0x8000
+        Assert.Equal(0x0000, cpu.Sta & 0x0800);
+    }
+
+    [Fact]
+    public void Ldiv_WithQuotientOverflow_ShouldWrapAndSetOverflow()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0001); // C high
+        cpu.Push(0x0000); // B low
+        cpu.Push(0x0001); // A divisor => dividend 0x00010000
+        isa.TryExecute(0x0033, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0000, cpu.Ra); // remainder
+        Assert.Equal(0x0000, cpu.Rb); // quotient wraps
+        Assert.Equal(0x0800, cpu.Sta & 0x0800);
     }
 
     [Fact]

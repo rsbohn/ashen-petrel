@@ -146,13 +146,19 @@ ash> dis 100          # Disassemble to verify
 100: NOP
 ```
 
+Assembler directives in `asm <file>`:
+- `ORG <addr>` sets the assembly address (octal by default, `#` decimal, `$` hex).
+- `DW <value...>` emits 16-bit words.
+- `DD <value...>` emits 32-bit values as two words (high then low).
+- `DQ <value...>` emits 64-bit values as four words (high to low).
+
 ## Device Management
 
 The emulator supports peripheral devices with block-based I/O.
 
 ### Device Types
 
-- `tty` - Terminal/teletype
+- `tty` - Terminal/teletype (WIO 0 writes low 8-bit ASCII to console)
 - `lpt` - Line printer
 - `mt0` - Magnetic tape drive 0
 - `d0` - Disk drive 0
@@ -194,12 +200,13 @@ ash> x 0                         # Verify the data
 ```
 System:           help, words, quit, exit
 CPU Control:      reset, go, run, step, regs
-Memory:           exam (x), deposit (dep, d)
-Assembly:         asm, dis
+Memory:           exam (x), deposit (dep, d), txt
+Assembly:         asm, &asm, dis, syms
 Breakpoints:      break, breaks, clear
 Stack:            . dup drop swap over + - and or xor invert @ !
-Devices:          devs, attach, detach, status
+Devices:          devs, attach, detach, status, lptcols, lptradix
 Block I/O:        readblk, writeblk
+Watch:            watch, unwatch, watches
 ```
 
 ## Tips and Best Practices

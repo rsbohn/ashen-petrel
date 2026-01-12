@@ -64,10 +64,15 @@ namespace Ashen
         private const ushort StorXFlag = 0x0800;
         private const ushort StorIFlag = 0x0400;
         private const ushort StorDispMask = 0x01FF;
+        private const ushort LddMask = 0xF200;
+        private const ushort LddBase = 0xD200;
+        private const ushort StdMask = 0xF200;
+        private const ushort StdBase = 0xE200;
         private const ushort ImmediateMask = 0xFF00;
         private const ushort ImmediateLdiBase = 0x2200;
         private const ushort ImmediateLdXiBase = 0x2300;
         private const ushort ImmediateValueMask = 0x00FF;
+        private const ushort DdivWord = 0x2179; // 020571 octal
         private const ushort StatusCcl = 0x0100;
         private const ushort StatusCce = 0x0200;
         private const ushort StatusCci = 0x0300;
@@ -111,6 +116,7 @@ namespace Ashen
 
             _mnemonics[HaltWord] = "HALT 0";
             _opcodes["HALT"] = HaltWord;
+            _opcodes["DDIV"] = DdivWord;
         }
 
         public bool TryExecute(ushort opcode, Hp3000Cpu cpu)
@@ -128,6 +134,16 @@ namespace Ashen
                     {
                         cpu.Pop();
                         cpu.Pop();
+                        return true;
+                    }
+                case 0x0004: // INCX
+                    {
+                        cpu.X = (ushort)(cpu.X + 1);
+                        return true;
+                    }
+                case 0x0005: // DECX
+                    {
+                        cpu.X = (ushort)(cpu.X - 1);
                         return true;
                     }
                 case 0x0006: // ZERO
@@ -167,6 +183,34 @@ namespace Ashen
                         cpu.Push(high);
                         cpu.Push(low);
                         UpdateDoubleAddFlags(cpu, left, right, result, sum > 0xFFFFFFFF);
+                        return true;
+                    }
+                case 0x000C: // DIVL
+                    {
+                        var a = cpu.Pop();
+                        var b = cpu.Pop();
+                        var c = cpu.Pop();
+                        uint quotient = 0;
+                        uint remainder = 0;
+                        var overflow = false;
+                        if (a == 0)
+                        {
+                            overflow = true;
+                        }
+                        else
+                        {
+                            var dividend = ((uint)c << 16) | b;
+                            quotient = dividend / a;
+                            remainder = dividend % a;
+                            if (quotient > 0xFFFF)
+                            {
+                                overflow = true;
+                            }
+                        }
+
+                        cpu.Push((ushort)quotient);
+                        cpu.Push((ushort)remainder);
+                        UpdateDivFlags(cpu, (ushort)quotient, overflow);
                         return true;
                     }
                 case 0x0010: // ADD
@@ -212,6 +256,34 @@ namespace Ashen
                         cpu.Push(quotient);
                         cpu.Push(remainder);
                         UpdateDivFlags(cpu, quotient, overflow: false);
+                        return true;
+                    }
+                case 0x0033: // LDIV
+                    {
+                        var a = cpu.Pop();
+                        var b = cpu.Pop();
+                        var c = cpu.Pop();
+                        uint quotient = 0;
+                        uint remainder = 0;
+                        var overflow = false;
+                        if (a == 0)
+                        {
+                            overflow = true;
+                        }
+                        else
+                        {
+                            var dividend = ((uint)c << 16) | b;
+                            quotient = dividend / a;
+                            remainder = dividend % a;
+                            if (quotient > 0xFFFF)
+                            {
+                                overflow = true;
+                            }
+                        }
+
+                        cpu.Push((ushort)quotient);
+                        cpu.Push((ushort)remainder);
+                        UpdateDivFlags(cpu, (ushort)quotient, overflow);
                         return true;
                     }
                 case 0x0014: // NEG
@@ -327,6 +399,35 @@ namespace Ashen
         {
             if (TryExecuteSpecial(word, cpu))
             {
+                return true;
+            }
+
+            if (word == DdivWord)
+            {
+                var a = cpu.Pop();
+                var b = cpu.Pop();
+                var c = cpu.Pop();
+                var d = cpu.Pop();
+                var divisor = ((uint)b << 16) | a;
+                var dividend = ((uint)d << 16) | c;
+                uint quotient = 0;
+                uint remainder = 0;
+                var overflow = false;
+                if (divisor == 0)
+                {
+                    overflow = true;
+                }
+                else
+                {
+                    quotient = dividend / divisor;
+                    remainder = dividend % divisor;
+                }
+
+                cpu.Push((ushort)(quotient >> 16));
+                cpu.Push((ushort)(quotient & 0xFFFF));
+                cpu.Push((ushort)(remainder >> 16));
+                cpu.Push((ushort)(remainder & 0xFFFF));
+                UpdateDoubleDivFlags(cpu, quotient, overflow);
                 return true;
             }
 
@@ -532,6 +633,27 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & LddMask) == LddBase)
+            {
+                var displacement = word & StorDispMask;
+                var loadTarget = (cpu.Db + displacement) & 0x7fff;
+                cpu.Push(cpu.ReadWord(loadTarget));
+                cpu.Push(cpu.ReadWord((loadTarget + 1) & 0x7fff));
+                UpdateCcFlags(cpu, cpu.Ra);
+                return true;
+            }
+
+            if ((word & StdMask) == StdBase)
+            {
+                var displacement = word & StorDispMask;
+                var storTarget = (cpu.Db + displacement) & 0x7fff;
+                var low = cpu.Pop();
+                var high = cpu.Pop();
+                cpu.WriteWord(storTarget, high);
+                cpu.WriteWord((storTarget + 1) & 0x7fff, low);
+                return true;
+            }
+
             if ((word & BranchMask) == BranchBase)
             {
                 var offset = word & BranchOffsetMask;
@@ -594,6 +716,11 @@ namespace Ashen
                 return "HALT 0";
             }
 
+            if (opcode == DdivWord)
+            {
+                return "DDIV";
+            }
+
             var immediateKind = (ushort)(opcode & ImmediateMask);
             if (immediateKind == ImmediateLdiBase || immediateKind == ImmediateLdXiBase)
             {
@@ -648,6 +775,16 @@ namespace Ashen
             if ((opcode & StorMask) == StorBase)
             {
                 return DisassembleStor(opcode);
+            }
+
+            if ((opcode & LddMask) == LddBase)
+            {
+                return DisassembleLdd(opcode);
+            }
+
+            if ((opcode & StdMask) == StdBase)
+            {
+                return DisassembleStd(opcode);
             }
 
             if ((opcode & BranchMask) == BranchBase)
@@ -784,6 +921,16 @@ namespace Ashen
             if (mnemonic.Equals("STOR", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleStor(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("LDD", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleLdd(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("STD", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleStd(operand, out opcode);
             }
 
             if (mnemonic.Equals("LDI", StringComparison.OrdinalIgnoreCase))
@@ -998,6 +1145,20 @@ namespace Ashen
 
             var offsetText = Convert.ToString(displacement, 8);
             return $"STOR DB+{offsetText}{suffix}";
+        }
+
+        private static string DisassembleLdd(ushort word)
+        {
+            var displacement = (ushort)(word & StorDispMask);
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"LDD DB+{offsetText}";
+        }
+
+        private static string DisassembleStd(ushort word)
+        {
+            var displacement = (ushort)(word & StorDispMask);
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"STD DB+{offsetText}";
         }
 
         private static string DisassembleIabz(ushort word)
@@ -1269,6 +1430,86 @@ namespace Ashen
                 }
             }
 
+            return true;
+        }
+
+        private static bool TryAssembleLdd(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 1)
+            {
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var offsetText = basePart;
+            if (basePart.StartsWith("DB", StringComparison.OrdinalIgnoreCase))
+            {
+                if (basePart.Length < 4 || basePart[2] != '+')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[3..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > StorDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(LddBase | offset);
+            return true;
+        }
+
+        private static bool TryAssembleStd(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 1)
+            {
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var offsetText = basePart;
+            if (basePart.StartsWith("DB", StringComparison.OrdinalIgnoreCase))
+            {
+                if (basePart.Length < 4 || basePart[2] != '+')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[3..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > StorDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(StdBase | offset);
             return true;
         }
 
@@ -1698,6 +1939,23 @@ namespace Ashen
             var cc = quotient == 0
                 ? StatusCce
                 : (quotient & 0x8000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO));
+            updated |= cc;
+            if (overflow)
+            {
+                updated |= StatusO;
+            }
+
+            cpu.Sta = updated;
+        }
+
+        private static void UpdateDoubleDivFlags(Hp3000Cpu cpu, uint quotient, bool overflow)
+        {
+            var cc = quotient == 0
+                ? StatusCce
+                : (quotient & 0x80000000) != 0
                     ? StatusCcl
                     : StatusCcg;
             var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO));
