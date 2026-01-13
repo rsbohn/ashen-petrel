@@ -136,6 +136,11 @@ namespace Ashen
                         cpu.Pop();
                         return true;
                     }
+                case 0x0003: // ZROX
+                    {
+                        cpu.X = 0;
+                        return true;
+                    }
                 case 0x0004: // INCX
                     {
                         cpu.X = (ushort)(cpu.X + 1);
@@ -326,6 +331,12 @@ namespace Ashen
                 case 0x0020: // DEL
                     {
                         cpu.Pop();
+                        return true;
+                    }
+                case 0x0021: // ZROB
+                    {
+                        cpu.ReplaceSecond(0);
+                        UpdateCcFlags(cpu, 0);
                         return true;
                     }
                 case 0x0022: // LDXB
