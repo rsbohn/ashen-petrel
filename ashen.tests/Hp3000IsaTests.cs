@@ -925,4 +925,45 @@ public class Hp3000IsaTests
         Assert.Equal(1, cpu.Sr);
         Assert.Equal(0xAAAA, cpu.Ra);
     }
+
+    [Fact]
+    public void Zrox_ShouldSetXToZero()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.X = 0x1234;
+        isa.TryExecute(0x0003, cpu);
+        
+        Assert.Equal(0, cpu.X);
+    }
+
+    [Fact]
+    public void Zrob_ShouldSetBToZeroAndUpdateSr()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x5678);
+        cpu.Push(0x1234);
+        cpu.Sta = 0x0C00;
+        isa.TryExecute(0x0021, cpu);
+        
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x1234, cpu.Ra);
+        Assert.Equal(0x0000, cpu.Rb);
+        Assert.Equal(0x0200, cpu.Sta & 0x0300);
+    }
+
+    [Fact]
+    public void Zrob_WithInsufficientStack_ShouldHalt()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x1234);
+        isa.TryExecute(0x0021, cpu);
+        
+        Assert.True(cpu.Halted);
+    }
 }
