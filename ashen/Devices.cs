@@ -77,7 +77,8 @@ namespace Ashen
 
         public void WriteByte(byte value)
         {
-            Console.Write((char)value);
+            Console.Out.Write((char)value);
+            Console.Out.Flush();
         }
     }
 

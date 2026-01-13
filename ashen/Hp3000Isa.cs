@@ -14,8 +14,8 @@ namespace Ashen
         private const ushort BranchOffsetMask = 0x00FF;
         private const ushort LoadMask = 0xF000;
         private const ushort LoadBase = 0x4000;
-        private const ushort LoadXFlag = 0x0400;
-        private const ushort LoadIFlag = 0x0200;
+        private const ushort LoadXFlag = 0x0800;
+        private const ushort LoadIFlag = 0x0400;
         private const ushort LoadDispMask = 0x01FF;
         private const ushort LoadDispSign = 0x0100;
         private const ushort LoadDispValueMask = 0x00FF;
@@ -434,7 +434,9 @@ namespace Ashen
             var immediateKind = (ushort)(word & ImmediateMask);
             if (immediateKind == ImmediateLdiBase)
             {
-                cpu.Push((ushort)(word & ImmediateValueMask));
+                var value = (ushort)(word & ImmediateValueMask);
+                cpu.Push(value);
+                UpdateCcFlags(cpu, value);
                 return true;
             }
 
@@ -637,6 +639,16 @@ namespace Ashen
             {
                 var displacement = word & StorDispMask;
                 var loadTarget = (cpu.Db + displacement) & 0x7fff;
+                if ((word & StorXFlag) != 0)
+                {
+                    loadTarget = (loadTarget + cpu.X) & 0x7fff;
+                }
+
+                if ((word & StorIFlag) != 0)
+                {
+                    loadTarget = cpu.ReadWord(loadTarget) & 0x7fff;
+                }
+
                 cpu.Push(cpu.ReadWord(loadTarget));
                 cpu.Push(cpu.ReadWord((loadTarget + 1) & 0x7fff));
                 UpdateCcFlags(cpu, cpu.Ra);
@@ -647,6 +659,16 @@ namespace Ashen
             {
                 var displacement = word & StorDispMask;
                 var storTarget = (cpu.Db + displacement) & 0x7fff;
+                if ((word & StorXFlag) != 0)
+                {
+                    storTarget = (storTarget + cpu.X) & 0x7fff;
+                }
+
+                if ((word & StorIFlag) != 0)
+                {
+                    storTarget = cpu.ReadWord(storTarget) & 0x7fff;
+                }
+
                 var low = cpu.Pop();
                 var high = cpu.Pop();
                 cpu.WriteWord(storTarget, high);
@@ -697,7 +719,9 @@ namespace Ashen
                     loadTarget = cpu.ReadWord(loadTarget) & 0x7fff;
                 }
 
-                cpu.Push(cpu.ReadWord(loadTarget));
+                var loadedValue = cpu.ReadWord(loadTarget);
+                cpu.Push(loadedValue);
+                UpdateCcFlags(cpu, loadedValue);
                 return true;
             }
 
@@ -1150,15 +1174,37 @@ namespace Ashen
         private static string DisassembleLdd(ushort word)
         {
             var displacement = (ushort)(word & StorDispMask);
+            var suffix = "";
+            if ((word & StorIFlag) != 0)
+            {
+                suffix += ",I";
+            }
+
+            if ((word & StorXFlag) != 0)
+            {
+                suffix += ",X";
+            }
+
             var offsetText = Convert.ToString(displacement, 8);
-            return $"LDD DB+{offsetText}";
+            return $"LDD DB+{offsetText}{suffix}";
         }
 
         private static string DisassembleStd(ushort word)
         {
             var displacement = (ushort)(word & StorDispMask);
+            var suffix = "";
+            if ((word & StorIFlag) != 0)
+            {
+                suffix += ",I";
+            }
+
+            if ((word & StorXFlag) != 0)
+            {
+                suffix += ",X";
+            }
+
             var offsetText = Convert.ToString(displacement, 8);
-            return $"STD DB+{offsetText}";
+            return $"STD DB+{offsetText}{suffix}";
         }
 
         private static string DisassembleIabz(ushort word)
@@ -1442,7 +1488,7 @@ namespace Ashen
             }
 
             var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 1)
+            if (parts.Length == 0)
             {
                 return false;
             }
@@ -1470,6 +1516,23 @@ namespace Ashen
             }
 
             opcode = (ushort)(LddBase | offset);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= StorIFlag;
+                }
+                else if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= StorXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -1482,7 +1545,7 @@ namespace Ashen
             }
 
             var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 1)
+            if (parts.Length == 0)
             {
                 return false;
             }
@@ -1510,6 +1573,23 @@ namespace Ashen
             }
 
             opcode = (ushort)(StdBase | offset);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= StorIFlag;
+                }
+                else if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= StorXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
 

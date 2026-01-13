@@ -318,7 +318,7 @@ namespace Ashen
             _cpu.Reset(address);
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
             var ran = _cpu.Run(steps);
-            Console.WriteLine($"ran {ToOctalCount(ran)} steps");
+            Console.WriteLine($"\nran {ToOctalCount(ran)} steps");
             ReportHaltReason();
         }
 
@@ -326,7 +326,7 @@ namespace Ashen
         {
             var steps = stream.TryNextNumber(out var maxSteps) ? maxSteps : 1000;
             var ran = _cpu.Run(steps);
-            Console.WriteLine($"ran {ToOctalCount(ran)} steps");
+            Console.WriteLine($"\nran {ToOctalCount(ran)} steps");
             ReportHaltReason();
         }
 
@@ -346,7 +346,7 @@ namespace Ashen
                 ran++;
             }
 
-            Console.WriteLine($"stepped {ToOctalCount(ran)} steps");
+            Console.WriteLine($"\nstepped {ToOctalCount(ran)} steps");
             ReportHaltReason();
         }
 
@@ -367,7 +367,7 @@ namespace Ashen
                 ran++;
             }
 
-            Console.WriteLine($"traced {ToOctalCount(ran)} steps");
+            Console.WriteLine($"\ntraced {ToOctalCount(ran)} steps");
         }
 
         private void ExamMemory(TokenStream stream)
@@ -464,7 +464,7 @@ namespace Ashen
         {
             if (_cpu.Halted && !string.IsNullOrWhiteSpace(_cpu.HaltReason))
             {
-                Console.WriteLine($"halt: {_cpu.HaltReason}");
+                Console.WriteLine($"\nhalt: {_cpu.HaltReason}");
             }
         }
 

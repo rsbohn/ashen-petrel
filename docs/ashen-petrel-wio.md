@@ -11,7 +11,7 @@ This document describes the current `WIO` behavior in the emulator.
 
 ## Device Codes
 
-- `0` = `tty` (not implemented for output yet; `WIO 0` reports not-ready)
+- `0` = `tty` (writes low 8-bit ASCII to the console)
 - `1` = `lpt` processed output (radix formatting)
 - `2` = `lpt` raw output (16-bit word to bytes, no radix formatting)
 
