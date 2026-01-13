@@ -72,6 +72,12 @@ namespace Ashen
         private const ushort ImmediateLdiBase = 0x2200;
         private const ushort ImmediateLdXiBase = 0x2300;
         private const ushort ImmediateValueMask = 0x00FF;
+        private const ushort ScalBase = 0x3100; // 030400 octal
+        private const ushort ScalMask = 0xFF00;
+        private const ushort ScalOperandMask = 0x00FF;
+        private const ushort SxitBase = 0x3400; // 032000 octal
+        private const ushort SxitMask = 0xFF00;
+        private const ushort SxitOperandMask = 0x00FF;
         private const ushort DdivWord = 0x2179; // 020571 octal
         private const ushort StatusCcl = 0x0100;
         private const ushort StatusCce = 0x0200;
@@ -413,6 +419,18 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & ScalMask) == ScalBase)
+            {
+                ExecuteScal((ushort)(word & ScalOperandMask), cpu);
+                return true;
+            }
+
+            if ((word & SxitMask) == SxitBase)
+            {
+                ExecuteSxit((ushort)(word & SxitOperandMask), cpu);
+                return true;
+            }
+
             if (word == DdivWord)
             {
                 var a = cpu.Pop();
@@ -746,6 +764,16 @@ namespace Ashen
                 return special;
             }
 
+            if ((opcode & ScalMask) == ScalBase)
+            {
+                return $"SCAL {ToOctal3((ushort)(opcode & ScalOperandMask))}";
+            }
+
+            if ((opcode & SxitMask) == SxitBase)
+            {
+                return $"SXIT {ToOctal3((ushort)(opcode & SxitOperandMask))}";
+            }
+
             if (opcode == HaltWord)
             {
                 return "HALT 0";
@@ -866,6 +894,16 @@ namespace Ashen
 
                 opcode = 0;
                 return false;
+            }
+
+            if (mnemonic.Equals("SCAL", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleScal(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("SXIT", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleSxit(operand, out opcode);
             }
 
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
@@ -1004,6 +1042,36 @@ namespace Ashen
 
             opcode = 0;
             return false;
+        }
+
+        private static void ExecuteScal(ushort operand, Hp3000Cpu cpu)
+        {
+            var returnAddress = (ushort)(cpu.Pc & 0x7fff);
+            if (operand == 0)
+            {
+                var label = cpu.Peek();
+                var target = (cpu.Pb + (label & 0x7fff)) & 0x7fff;
+                cpu.ReplaceTop(returnAddress);
+                cpu.Pc = target;
+                return;
+            }
+
+            var entryAddress = (cpu.Pl - operand) & 0x7fff;
+            var entry = cpu.ReadWord(entryAddress);
+            var targetAddress = (cpu.Pb + (entry & 0x7fff)) & 0x7fff;
+            cpu.Push(returnAddress);
+            cpu.Pc = targetAddress;
+        }
+
+        private static void ExecuteSxit(ushort operand, Hp3000Cpu cpu)
+        {
+            var returnAddress = cpu.Pop();
+            for (var i = 0; i < operand; i++)
+            {
+                cpu.Pop();
+            }
+
+            cpu.Pc = returnAddress & 0x7fff;
         }
 
         private static bool TryExecuteSpecial(ushort word, Hp3000Cpu cpu)
@@ -2031,6 +2099,40 @@ namespace Ashen
             }
 
             opcode = (ushort)(baseOpcode | value);
+            return true;
+        }
+
+        private static bool TryAssembleScal(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (!TryParseOctal(operand, out var value))
+            {
+                return false;
+            }
+
+            if (value > ScalOperandMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(ScalBase | value);
+            return true;
+        }
+
+        private static bool TryAssembleSxit(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (!TryParseOctal(operand, out var value))
+            {
+                return false;
+            }
+
+            if (value > SxitOperandMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(SxitBase | value);
             return true;
         }
 

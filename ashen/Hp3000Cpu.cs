@@ -19,6 +19,8 @@ namespace Ashen
         }
 
         public int Pc { get; internal set; }
+        public int Pb { get; internal set; }
+        public int Pl { get; internal set; }
         public int Sp { get; internal set; }
         public int Sm { get; internal set; }
         public int Sr { get; internal set; }
@@ -36,6 +38,8 @@ namespace Ashen
         public void Reset(int address = 0)
         {
             Pc = address & 0x7fff;
+            Pb = 0;
+            Pl = _memory.Size;
             Sp = _memory.Size - 1;
             Sm = 0x1000;
             Sr = 0;

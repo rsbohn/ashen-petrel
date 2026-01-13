@@ -110,6 +110,7 @@ namespace Ashen
                 ["step"] = StepCpu,
                 ["trace"] = TraceCpu,
                 ["t"] = TraceCpu,
+                ["scal"] = ScalCall,
                 ["regs"] = _ => ShowRegs(),
                 ["exam"] = ExamMemory,
                 ["x"] = ExamMemory,
@@ -139,7 +140,7 @@ namespace Ashen
 
         private void ShowHelp()
         {
-            Console.WriteLine("Core: help words reset go run step exam deposit dis break breaks asm &asm syms txt");
+            Console.WriteLine("Core: help words reset go run step scal exam deposit dis break breaks asm &asm syms txt");
             Console.WriteLine("Stack: . dup drop swap over + - and or xor invert ! @");
             Console.WriteLine("Devices: devs status attach detach readblk writeblk lptcols lptradix");
             Console.WriteLine("Watch: watch unwatch watches");
@@ -420,6 +421,26 @@ namespace Ashen
             }
         }
 
+        private void ScalCall(TokenStream stream)
+        {
+            if (stream.HasMore)
+            {
+                Console.WriteLine("scal");
+                return;
+            }
+
+            if (!_isa.TryAssemble("SCAL", "0", out var opcode))
+            {
+                Console.WriteLine("scal: assemble failed");
+                return;
+            }
+
+            if (!_isa.TryExecuteWord(opcode, _cpu))
+            {
+                Console.WriteLine("scal: execute failed");
+            }
+        }
+
         private void StoreText(TokenStream stream)
         {
             if (!stream.TryNextNumber(out var address))
@@ -455,7 +476,7 @@ namespace Ashen
 
         private void ShowRegs()
         {
-            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} DB={ToOctal(_cpu.Db)} X={ToOctal(_cpu.X)} HALT={(_cpu.Halted ? "1" : "0")}");
+            Console.WriteLine($"PC={ToOctal(_cpu.Pc)} PB={ToOctal(_cpu.Pb)} PL={ToOctal(_cpu.Pl)} SM={ToOctal(_cpu.Sm)} SR={_cpu.Sr} DB={ToOctal(_cpu.Db)} X={ToOctal(_cpu.X)} HALT={(_cpu.Halted ? "1" : "0")}");
             Console.WriteLine($"STACK: {ToOctal(_cpu.Ra)} {ToOctal(_cpu.Rb)} {ToOctal(_cpu.Rc)} {ToOctal(_cpu.Rd)} ... ({ToOctalCount(_cpu.StackDepth)})");
             Console.WriteLine($"STA: {FormatStatusFlags(_cpu.Sta)} {FormatStatusCondition(_cpu.Sta)} {ToOctalStatus(_cpu.Sta)}");
         }
@@ -509,6 +530,8 @@ namespace Ashen
                 || token.Equals("STOR", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("LDD", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("STD", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("SCAL", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("SXIT", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
@@ -621,6 +644,25 @@ namespace Ashen
                     continue;
                 }
 
+                if (mnemonic.Equals("TXT", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (operand == null)
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: TXT requires /text/");
+                        return;
+                    }
+
+                    if (!TryParseTextLiteral(operand, out var text, out var error))
+                    {
+                        Console.WriteLine($"asm {path}:{lineNumber}: {error}");
+                        return;
+                    }
+
+                    lines.Add(new AsmLine(lineNumber, address, "TXT", operand, line));
+                    address = (address + text.Length) & 0x7fff;
+                    continue;
+                }
+
                 if (mnemonic.Equals("DD", StringComparison.OrdinalIgnoreCase))
                 {
                     if (operand == null)
@@ -691,6 +733,31 @@ namespace Ashen
                         _memory.Write(writeAddress, (ushort)(value & 0xffff));
                         writeAddress = (writeAddress + 1) & 0x7fff;
                         assembled += 2;
+                    }
+
+                    continue;
+                }
+
+                if (asmLine.Mnemonic.Equals("TXT", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (asmLine.Operand == null)
+                    {
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: TXT requires /text/");
+                        return;
+                    }
+
+                    if (!TryParseTextLiteral(asmLine.Operand, out var text, out var error))
+                    {
+                        Console.WriteLine($"asm {path}:{asmLine.LineNumber}: {error}");
+                        return;
+                    }
+
+                    var writeAddress = asmLine.Address;
+                    foreach (var ch in text)
+                    {
+                        _memory.Write(writeAddress, (ushort)(ch & 0xFF));
+                        writeAddress = (writeAddress + 1) & 0x7fff;
+                        assembled++;
                     }
 
                     continue;
@@ -1156,6 +1223,8 @@ namespace Ashen
                 || mnemonic.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("SCAL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("SXIT", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("HALT", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -1543,6 +1612,35 @@ namespace Ashen
         private static string ToOctal(int value)
         {
             return Convert.ToString(value & 0xffff, 8).PadLeft(6, '0');
+        }
+
+        private static bool TryParseTextLiteral(string operand, out string text, out string error)
+        {
+            text = string.Empty;
+            error = string.Empty;
+
+            var trimmed = operand.Trim();
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            {
+                error = "TXT requires /text/";
+                return false;
+            }
+
+            var lastSlash = trimmed.LastIndexOf('/');
+            if (lastSlash == 0)
+            {
+                error = "TXT requires closing /";
+                return false;
+            }
+
+            if (lastSlash < trimmed.Length - 1 && trimmed[(lastSlash + 1)..].Trim().Length != 0)
+            {
+                error = "TXT has trailing characters after closing /";
+                return false;
+            }
+
+            text = trimmed[1..lastSlash];
+            return true;
         }
 
         private static bool TryParseSlashDelimitedText(string firstToken, TokenStream stream, out string text, out string error)

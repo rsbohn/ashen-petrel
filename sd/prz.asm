@@ -1,5 +1,13 @@
 ;; Print asciiz string
-ORG 10
+    ORG 10
+START:
+    LDI PUTS
+    SCAL 0
+    HALT
+;; or:
+;; > dep 077777 13
+;; > asm SCAL 1 11
+
 PUTS:
     ZERO, STAX    ; string index
     LOAD MESSAGE,X
@@ -7,9 +15,10 @@ PUTS:
     WIO 0
     INCX
     BR .-4
-    HALT
+    DEL
+    SXIT 0
 
-ORG 60
+    ORG 60
 MESSAGE:
-    DW #104 #117 #109 #105 #108 #105 #116 #121 
+    TXT /humility / 
     DW 014 0
