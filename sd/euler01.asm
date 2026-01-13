@@ -18,7 +18,7 @@ LOOP:
     DEL
     BE SUM
 NEXT:               ; ensure DXBZ runs every iteration
-    DXBZ P+2
+    DXBZ .+2
     BR LOOP
     HALT
 

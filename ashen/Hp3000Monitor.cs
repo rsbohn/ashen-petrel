@@ -933,9 +933,8 @@ namespace Ashen
                 return true;
             }
 
-            if (basePart.StartsWith("P", StringComparison.OrdinalIgnoreCase))
+            if (TryResolvePcRelativeToken(basePart, out resolved))
             {
-                resolved = basePart;
                 return true;
             }
 
@@ -944,7 +943,7 @@ namespace Ashen
                 var displacement = target - address;
                 var direction = displacement < 0 ? '-' : '+';
                 var magnitude = Math.Abs(displacement);
-                resolved = $"P{direction}{Convert.ToString(magnitude, 8)}";
+                resolved = $".{direction}{Convert.ToString(magnitude, 8)}";
                 return true;
             }
 
@@ -974,18 +973,9 @@ namespace Ashen
                 return true;
             }
 
-            if (basePart.StartsWith("P", StringComparison.OrdinalIgnoreCase))
+            if (TryResolvePcRelativeToken(basePart, out resolved))
             {
-                resolved = basePart;
                 return true;
-            }
-
-            if (basePart.StartsWith(".", StringComparison.Ordinal))
-            {
-                if (TryResolveDotRelative(basePart, out resolved))
-                {
-                    return true;
-                }
             }
 
             var plusIndex = basePart.IndexOf('+');
@@ -1026,10 +1016,15 @@ namespace Ashen
             return false;
         }
 
-        private static bool TryResolveDotRelative(string token, out string resolved)
+        private static bool TryResolvePcRelativeToken(string token, out string resolved)
         {
             resolved = string.Empty;
-            if (token.Length < 2)
+            if (token.Length < 3)
+            {
+                return false;
+            }
+
+            if (token[0] != '.' && token[0] != 'P' && token[0] != 'p')
             {
                 return false;
             }
@@ -1046,7 +1041,7 @@ namespace Ashen
                 return false;
             }
 
-            resolved = $"P{sign}{Convert.ToString(magnitude, 8)}";
+            resolved = $".{sign}{Convert.ToString(magnitude, 8)}";
             return true;
         }
 

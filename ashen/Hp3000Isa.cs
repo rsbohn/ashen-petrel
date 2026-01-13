@@ -1118,7 +1118,7 @@ namespace Ashen
                 suffix += ",X";
             }
 
-            return $"BR P{direction}{offsetText}{suffix}";
+            return $"BR .{direction}{offsetText}{suffix}";
         }
 
         private static string DisassembleImmediate(ushort word)
@@ -1150,7 +1150,7 @@ namespace Ashen
             }
 
             var offsetText = Convert.ToString(displacement, 8);
-            return $"LOAD P{direction}{offsetText}{suffix}";
+            return $"LOAD .{direction}{offsetText}{suffix}";
         }
 
         private static string DisassembleStor(ushort word)
@@ -1213,7 +1213,7 @@ namespace Ashen
             var direction = (word & IabzBackFlag) != 0 ? '-' : '+';
             var suffix = (word & IabzIndirectFlag) != 0 ? ",I" : "";
             var offsetText = Convert.ToString(displacement, 8);
-            return $"IABZ P{direction}{offsetText}{suffix}";
+            return $"IABZ .{direction}{offsetText}{suffix}";
         }
 
         private static string DisassembleIxbz(ushort word)
@@ -1222,7 +1222,7 @@ namespace Ashen
             var direction = (word & IxbzBackFlag) != 0 ? '-' : '+';
             var suffix = (word & IxbzIndirectFlag) != 0 ? ",I" : "";
             var offsetText = Convert.ToString(displacement, 8);
-            return $"IXBZ P{direction}{offsetText}{suffix}";
+            return $"IXBZ .{direction}{offsetText}{suffix}";
         }
 
         private static string DisassembleCondBranch(ushort word)
@@ -1244,7 +1244,7 @@ namespace Ashen
                 _ => $"BCC {ccf}"
             };
 
-            return $"{mnemonic} P{direction}{offsetText}";
+            return $"{mnemonic} .{direction}{offsetText}";
         }
 
         private static string DisassembleDxbz(ushort word)
@@ -1253,7 +1253,7 @@ namespace Ashen
             var direction = (word & DxbzBackFlag) != 0 ? '-' : '+';
             var suffix = (word & DxbzIndirectFlag) != 0 ? ",I" : "";
             var offsetText = Convert.ToString(displacement, 8);
-            return $"DXBZ P{direction}{offsetText}{suffix}";
+            return $"DXBZ .{direction}{offsetText}{suffix}";
         }
 
         private static string DisassembleBov(ushort word)
@@ -1261,7 +1261,7 @@ namespace Ashen
             var displacement = (ushort)(word & BovDispMask);
             var direction = (word & BovDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
-            return $"BOV P{direction}{offsetText}";
+            return $"BOV .{direction}{offsetText}";
         }
 
         private static string DisassembleBnov(ushort word)
@@ -1269,7 +1269,7 @@ namespace Ashen
             var displacement = (ushort)(word & BnovDispMask);
             var direction = (word & BnovDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
-            return $"BNOV P{direction}{offsetText}";
+            return $"BNOV .{direction}{offsetText}";
         }
 
         private static string DisassembleBcy(ushort word)
@@ -1277,7 +1277,7 @@ namespace Ashen
             var displacement = (ushort)(word & BcyDispMask);
             var direction = (word & BcyDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
-            return $"BCY P{direction}{offsetText}";
+            return $"BCY .{direction}{offsetText}";
         }
 
         private static string DisassembleBncy(ushort word)
@@ -1285,7 +1285,7 @@ namespace Ashen
             var displacement = (ushort)(word & BncyDispMask);
             var direction = (word & BncyDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
-            return $"BNCY P{direction}{offsetText}";
+            return $"BNCY .{direction}{offsetText}";
         }
 
         private static string DisassembleBro(ushort word)
@@ -1293,7 +1293,7 @@ namespace Ashen
             var displacement = (ushort)(word & BroDispMask);
             var direction = (word & BroDispSign) != 0 ? '-' : '+';
             var offsetText = Convert.ToString(displacement, 8);
-            return $"BRO P{direction}{offsetText}";
+            return $"BRO .{direction}{offsetText}";
         }
 
         private static bool TryAssembleBranch(string operand, out ushort opcode)
@@ -1311,18 +1311,12 @@ namespace Ashen
             }
 
             var basePart = parts[0].Trim();
-            if (basePart.Length < 3 || (basePart[0] != 'P' && basePart[0] != 'p'))
+            if (!TryParsePcRelative(basePart, requirePrefix: true, out var direction, out var offsetText))
             {
                 return false;
             }
 
-            var direction = basePart[1];
-            if (direction != '+' && direction != '-')
-            {
-                return false;
-            }
-
-            if (!TryParseOctal(basePart[2..], out var offset) || offset > BranchOffsetMask)
+            if (!TryParseOctal(offsetText, out var offset) || offset > BranchOffsetMask)
             {
                 return false;
             }
@@ -1373,22 +1367,9 @@ namespace Ashen
                 return false;
             }
 
-            var direction = '+';
-            var offsetText = basePart;
-            if (basePart[0] == 'P' || basePart[0] == 'p')
+            if (!TryParsePcRelative(basePart, requirePrefix: false, out var direction, out var offsetText))
             {
-                if (basePart.Length < 3)
-                {
-                    return false;
-                }
-
-                direction = basePart[1];
-                if (direction != '+' && direction != '-')
-                {
-                    return false;
-                }
-
-                offsetText = basePart[2..];
+                return false;
             }
 
             if (!TryParseOctal(offsetText, out var offset) || offset > LoadDispValueMask)
@@ -1613,22 +1594,9 @@ namespace Ashen
                 return false;
             }
 
-            var direction = '+';
-            var offsetText = basePart;
-            if (basePart[0] == 'P' || basePart[0] == 'p')
+            if (!TryParsePcRelative(basePart, requirePrefix: false, out var direction, out var offsetText))
             {
-                if (basePart.Length < 3)
-                {
-                    return false;
-                }
-
-                direction = basePart[1];
-                if (direction != '+' && direction != '-')
-                {
-                    return false;
-                }
-
-                offsetText = basePart[2..];
+                return false;
             }
 
             if (!TryParseOctal(offsetText, out var offset) || offset > IxbzDispMask)
@@ -1678,22 +1646,9 @@ namespace Ashen
                 return false;
             }
 
-            var direction = '+';
-            var offsetText = basePart;
-            if (basePart[0] == 'P' || basePart[0] == 'p')
+            if (!TryParsePcRelative(basePart, requirePrefix: false, out var direction, out var offsetText))
             {
-                if (basePart.Length < 3)
-                {
-                    return false;
-                }
-
-                direction = basePart[1];
-                if (direction != '+' && direction != '-')
-                {
-                    return false;
-                }
-
-                offsetText = basePart[2..];
+                return false;
             }
 
             if (!TryParseOctal(offsetText, out var offset) || offset > IxbzDispMask)
@@ -1737,22 +1692,9 @@ namespace Ashen
                 return false;
             }
 
-            var direction = '+';
-            var offsetText = basePart;
-            if (basePart[0] == 'P' || basePart[0] == 'p')
+            if (!TryParsePcRelative(basePart, requirePrefix: false, out var direction, out var offsetText))
             {
-                if (basePart.Length < 3)
-                {
-                    return false;
-                }
-
-                direction = basePart[1];
-                if (direction != '+' && direction != '-')
-                {
-                    return false;
-                }
-
-                offsetText = basePart[2..];
+                return false;
             }
 
             if (!TryParseOctal(offsetText, out var offset) || offset > CondBranchDispMask)
@@ -1789,22 +1731,9 @@ namespace Ashen
                 return false;
             }
 
-            var direction = '+';
-            var offsetText = basePart;
-            if (basePart[0] == 'P' || basePart[0] == 'p')
+            if (!TryParsePcRelative(basePart, requirePrefix: false, out var direction, out var offsetText))
             {
-                if (basePart.Length < 3)
-                {
-                    return false;
-                }
-
-                direction = basePart[1];
-                if (direction != '+' && direction != '-')
-                {
-                    return false;
-                }
-
-                offsetText = basePart[2..];
+                return false;
             }
 
             if (!TryParseOctal(offsetText, out var offset) || offset > DxbzDispMask)
@@ -1878,22 +1807,9 @@ namespace Ashen
                 return false;
             }
 
-            var direction = '+';
-            var offsetText = basePart;
-            if (basePart[0] == 'P' || basePart[0] == 'p')
+            if (!TryParsePcRelative(basePart, requirePrefix: true, out var direction, out var offsetText))
             {
-                if (basePart.Length < 3)
-                {
-                    return false;
-                }
-
-                direction = basePart[1];
-                if (direction != '+' && direction != '-')
-                {
-                    return false;
-                }
-
-                offsetText = basePart[2..];
+                return false;
             }
 
             if (!TryParseOctal(offsetText, out var offset) || offset > dispMask)
@@ -2047,6 +1963,49 @@ namespace Ashen
 
             cpu.Sta = updated;
         }
+
+        private static bool TryParsePcRelative(
+            string basePart,
+            bool requirePrefix,
+            out char direction,
+            out string offsetText)
+        {
+            direction = '+';
+            offsetText = basePart;
+            if (string.IsNullOrWhiteSpace(basePart))
+            {
+                return false;
+            }
+
+            if (basePart[0] == '.')
+            {
+                if (basePart.Length < 3)
+                {
+                    return false;
+                }
+
+                direction = basePart[1];
+                if (direction != '+' && direction != '-')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[2..];
+                return true;
+            }
+
+            if ((basePart[0] == 'P' || basePart[0] == 'p')
+                && basePart.Length >= 3
+                && (basePart[1] == '+' || basePart[1] == '-'))
+            {
+                direction = basePart[1];
+                offsetText = basePart[2..];
+                return true;
+            }
+
+            return !requirePrefix;
+        }
+
         private static bool TryAssembleImmediate(string operand, ushort baseOpcode, out ushort opcode)
         {
             opcode = 0;

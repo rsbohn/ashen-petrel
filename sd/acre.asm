@@ -4,6 +4,6 @@ START:
     LDI 377
     DUP
     STOR DB+077,X
-    DXBZ P+2
-    BR P-3
+    DXBZ .+2
+    BR .-3
     HALT

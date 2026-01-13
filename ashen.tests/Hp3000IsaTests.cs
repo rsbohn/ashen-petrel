@@ -614,7 +614,7 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
         
-        var result = isa.TryAssemble("BR", "P+10", out var opcode);
+        var result = isa.TryAssemble("BR", ".+10", out var opcode);
         
         Assert.True(result);
         Assert.Equal(0xC008, opcode);
@@ -625,7 +625,7 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
         
-        var result = isa.TryAssemble("BR", "P-10", out var opcode);
+        var result = isa.TryAssemble("BR", ".-10", out var opcode);
         
         Assert.True(result);
         Assert.Equal(0xC108, opcode);
@@ -636,7 +636,7 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
         
-        var result = isa.TryAssemble("BR", "P+10,I", out var opcode);
+        var result = isa.TryAssemble("BR", ".+10,I", out var opcode);
         
         Assert.True(result);
         Assert.Equal(0xC408, opcode);
@@ -647,7 +647,7 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
         
-        var result = isa.TryAssemble("BR", "P+10,X", out var opcode);
+        var result = isa.TryAssemble("BR", ".+10,X", out var opcode);
         
         Assert.True(result);
         Assert.Equal(0xC808, opcode);
@@ -658,7 +658,7 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
         
-        var result = isa.TryAssemble("BR", "P+10,I,X", out var opcode);
+        var result = isa.TryAssemble("BR", ".+10,I,X", out var opcode);
         
         Assert.True(result);
         Assert.Equal(0xCC08, opcode);
@@ -669,7 +669,7 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
 
-        var result = isa.TryAssemble("BRO", "P+2", out var opcode);
+        var result = isa.TryAssemble("BRO", ".+2", out var opcode);
 
         Assert.True(result);
         Assert.Equal(0x1782, opcode);
@@ -702,28 +702,28 @@ public class Hp3000IsaTests
     {
         var isa = new Hp3000Isa();
 
-        Assert.True(isa.TryAssemble("BN", "P+2", out var bn));
+        Assert.True(isa.TryAssemble("BN", ".+2", out var bn));
         Assert.Equal(0xC202, bn);
 
-        Assert.True(isa.TryAssemble("BL", "P+2", out var bl));
+        Assert.True(isa.TryAssemble("BL", ".+2", out var bl));
         Assert.Equal(0xC242, bl);
 
-        Assert.True(isa.TryAssemble("BE", "P+2", out var be));
+        Assert.True(isa.TryAssemble("BE", ".+2", out var be));
         Assert.Equal(0xC282, be);
 
-        Assert.True(isa.TryAssemble("BLE", "P+2", out var ble));
+        Assert.True(isa.TryAssemble("BLE", ".+2", out var ble));
         Assert.Equal(0xC2C2, ble);
 
-        Assert.True(isa.TryAssemble("BG", "P+2", out var bg));
+        Assert.True(isa.TryAssemble("BG", ".+2", out var bg));
         Assert.Equal(0xC302, bg);
 
-        Assert.True(isa.TryAssemble("BNE", "P+2", out var bne));
+        Assert.True(isa.TryAssemble("BNE", ".+2", out var bne));
         Assert.Equal(0xC342, bne);
 
-        Assert.True(isa.TryAssemble("BGE", "P+2", out var bge));
+        Assert.True(isa.TryAssemble("BGE", ".+2", out var bge));
         Assert.Equal(0xC382, bge);
 
-        Assert.True(isa.TryAssemble("BA", "P+2", out var ba));
+        Assert.True(isa.TryAssemble("BA", ".+2", out var ba));
         Assert.Equal(0xC3C2, ba);
     }
 
@@ -744,7 +744,7 @@ public class Hp3000IsaTests
         
         var disassembly = isa.Disassemble(0xC008);
         
-        Assert.Equal("BR P+10", disassembly);
+        Assert.Equal("BR .+10", disassembly);
     }
 
     [Fact]
@@ -754,7 +754,7 @@ public class Hp3000IsaTests
         
         var disassembly = isa.Disassemble(0xCD08);
         
-        Assert.Equal("BR P-10,I,X", disassembly);
+        Assert.Equal("BR .-10,I,X", disassembly);
     }
 
     [Fact]
@@ -764,7 +764,7 @@ public class Hp3000IsaTests
 
         var disassembly = isa.Disassemble(0x1782);
 
-        Assert.Equal("BRO P+2", disassembly);
+        Assert.Equal("BRO .+2", disassembly);
     }
 
     [Fact]

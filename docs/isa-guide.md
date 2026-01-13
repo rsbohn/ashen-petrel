@@ -15,6 +15,8 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `DDEL` | 000002 | Double delete. Pops two values from stack. |
 | `DCMP` | 000010 | Double compare: (D,C) vs (B,A) sets CC and pops both. |
 | `DADD` | 000011 | Double add: (D,C) + (B,A) → (B,A). |
+| `INCX` | 000004 | Increment X register. |
+| `DECX` | 000005 | Decrement X register. |
 | `ZERO` | 000006 | Push a zero onto the stack. |
 | `DZRO` | 000007 | Push two zeros onto the stack. |
 | `ADD` | 000020 | Add: b + a → result. |
@@ -44,18 +46,18 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 
 Branch instructions use a different format with opcode base `0xC000` (octal 140000).
 
-**Syntax:** `BR P±offset[,I][,X]`
+**Syntax:** `BR .±offset[,I][,X]`
 
-- **P±offset**: Program counter relative offset (octal, 0-377)
-  - `P+offset`: Branch forward
-  - `P-offset`: Branch backward
+- **.±offset**: Program counter relative offset (octal, 0-377)
+  - `.+offset`: Branch forward
+  - `.-offset`: Branch backward
 - **,I**: Indirect addressing (use memory value as target)
 - **,X**: Indexed addressing (add X register to target)
 
 **Examples:**
-- `BR P+10` - Branch forward 8 (decimal) locations
-- `BR P-5,X` - Branch backward 5 (octal), indexed by X
-- `BR P+100,I` - Branch forward to address in memory
+- `BR .+10` - Branch forward 8 (decimal) locations
+- `BR .-5,X` - Branch backward 5 (octal), indexed by X
+- `BR .+100,I` - Branch forward to address in memory
 
 ## Short Branch Instructions
 
@@ -63,22 +65,22 @@ Short branches use a 5-bit signed displacement (±31) with opcode base `141000`.
 
 | Mnemonic | CCF | Example | Octal |
 |----------|-----|---------|-------|
-| `BN` | 0 | `BN P+2` | 141002 |
-| `BL` | 1 | `BL P+2` | 141102 |
-| `BE` | 2 | `BE P+2` | 141202 |
-| `BLE` | 3 | `BLE P+2` | 141302 |
-| `BG` | 4 | `BG P+2` | 141402 |
-| `BNE` | 5 | `BNE P+2` | 141502 |
-| `BGE` | 6 | `BGE P+2` | 141602 |
-| `BA` | 7 | `BA P+2` | 141702 |
+| `BN` | 0 | `BN .+2` | 141002 |
+| `BL` | 1 | `BL .+2` | 141102 |
+| `BE` | 2 | `BE .+2` | 141202 |
+| `BLE` | 3 | `BLE .+2` | 141302 |
+| `BG` | 4 | `BG .+2` | 141402 |
+| `BNE` | 5 | `BNE .+2` | 141502 |
+| `BGE` | 6 | `BGE .+2` | 141602 |
+| `BA` | 7 | `BA .+2` | 141702 |
 
 Overflow/carry branches use separate short formats:
 
-- `BOV P+2` → `013002` (branch on overflow, clears O)
-- `BNOV P+2` → `013102` (branch on no overflow, clears O)
-- `BCY P+2` → `011402` (branch on carry, clears C)
-- `BNCY P+2` → `011502` (branch on no carry, clears C)
-- `BRO P+2` → `013602` (branch on odd value, pops TOS)
+- `BOV .+2` → `013002` (branch on overflow, clears O)
+- `BNOV .+2` → `013102` (branch on no overflow, clears O)
+- `BCY .+2` → `011402` (branch on carry, clears C)
+- `BNCY .+2` → `011502` (branch on no carry, clears C)
+- `BRO .+2` → `013602` (branch on odd value, pops TOS)
 
 ## Full-Word Instructions
 

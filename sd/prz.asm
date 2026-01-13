@@ -3,10 +3,10 @@ ORG 10
 PUTS:
     ZERO, STAX    ; string index
     LOAD MESSAGE,X
-    BE P+4
+    BE .+4
     WIO 0
     INCX
-    BR P-4
+    BR .-4
     HALT
 
 ORG 60
