@@ -2,6 +2,92 @@
 ; Bit index i represents odd n = 2*i + 3 (i=0 -> 3). Bit=1 means prime.
 ; 313 words, 5008 bits (last word masked).
 
+    ORG 04700
+; PRIMECHK: ( n -- status )
+; status: 0 = composite, 1 = prime, 2 = out-of-bounds
+PRIMECHK:
+    XCH                 ; swap return addr with n
+    DUP
+    LDI 2
+    SUB
+    DEL
+    BE PRIME_2_NEAR
+    BL PRIME_OOB_NEAR
+
+    DUP
+    LOAD MAX_N
+    SUB
+    DEL
+    BG PRIME_OOB_NEAR
+    BA .+3              ; skip OOB/2 stubs for in-range n
+
+PRIME_OOB_NEAR:
+    BR PRIME_OOB
+
+PRIME_2_NEAR:
+    BR PRIME_2
+
+    DUP
+    LDI 2
+    DIV, DELB
+    TEST
+    DEL
+    BE PRIME_COMPOSITE
+
+    ; i = (n - 3) / 2
+    LDI 3
+    SUB
+    LDI 2
+    DIV
+    DEL
+
+    ; word_idx = i / 16, bit_idx = i % 16
+    LDI 20
+    DIV
+    XCH
+    STAX
+    LOAD PRIMES_10K,X
+    XCH
+    STAX
+    LOAD MASKS,X
+    AND
+    TEST
+    DEL
+    BE PRIME_COMPOSITE_ODD
+    BR PRIME_ODD
+
+PRIME_2:
+    DEL
+    LDI 1
+    BR PRIME_DONE
+
+PRIME_ODD:
+    LDI 1
+    BR PRIME_DONE
+
+PRIME_COMPOSITE:
+    DEL
+    LDI 0
+    BR PRIME_DONE
+
+PRIME_COMPOSITE_ODD:
+    LDI 0
+    BR PRIME_DONE
+
+PRIME_OOB:
+    DEL
+    LDI 2
+
+PRIME_DONE:
+    XCH
+    SXIT 0
+
+MAX_N:  DW #9999
+
+MASKS:
+    DW 000001 000002 000004 000010 000020 000040 000100 000200
+    DW 000400 001000 002000 004000 010000 020000 040000 100000
+
     ORG 5000
 PRIMES_10K:
     DW 062667 031132 104515 040266 023031 141445 040406 110313

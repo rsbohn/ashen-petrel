@@ -57,11 +57,6 @@ namespace Ashen
 
         public void Push(ushort value)
         {
-            if (Halted)
-            {
-                return;
-            }
-
             if (Sr == 4)
             {
                 Sm = (Sm - 1) & 0x7fff;
@@ -81,11 +76,6 @@ namespace Ashen
 
         public ushort Pop()
         {
-            if (Halted)
-            {
-                return 0;
-            }
-
             if (Sr == 0)
             {
                 HaltWithError("stack underflow");
@@ -215,11 +205,6 @@ namespace Ashen
 
         public ushort Peek()
         {
-            if (Halted)
-            {
-                return 0;
-            }
-
             if (Sr == 0)
             {
                 HaltWithError("stack underflow");
@@ -231,11 +216,6 @@ namespace Ashen
 
         public ushort PeekSecond()
         {
-            if (Halted)
-            {
-                return 0;
-            }
-
             if (Sr < 2)
             {
                 HaltWithError("stack underflow");
@@ -247,11 +227,6 @@ namespace Ashen
 
         public void DropSecond()
         {
-            if (Halted)
-            {
-                return;
-            }
-
             if (Sr < 2)
             {
                 HaltWithError("stack underflow");
@@ -283,11 +258,6 @@ namespace Ashen
 
         public void ReplaceTop(ushort value)
         {
-            if (Halted)
-            {
-                return;
-            }
-
             if (Sr == 0)
             {
                 HaltWithError("stack underflow");
@@ -299,11 +269,6 @@ namespace Ashen
 
         public void ReplaceSecond(ushort value)
         {
-            if (Halted)
-            {
-                return;
-            }
-
             if (Sr < 2)
             {
                 HaltWithError("stack underflow");
