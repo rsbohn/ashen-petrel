@@ -334,6 +334,32 @@ namespace Ashen
                         cpu.ReplaceTop((ushort)(value - 1));
                         return true;
                     }
+                case 0x001D: // XAX
+                    {
+                        var temp = cpu.Peek();
+                        cpu.ReplaceTop(cpu.X);
+                        cpu.X = temp;
+                        return true;
+                    }
+                case 0x001E: // ADAX
+                    {
+                        var a = cpu.Peek();
+                        var x = cpu.X;
+                        var sum = (uint)(x + a);
+                        var result = (ushort)sum;
+                        cpu.X = result;
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(x, a, result));
+                        return true;
+                    }
+                case 0x001F: // ADXA
+                    {
+                        var a = cpu.Peek();
+                        var sum = (uint)(a + cpu.X);
+                        var result = (ushort)sum;
+                        cpu.ReplaceTop(result);
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(a, cpu.X, result));
+                        return true;
+                    }
                 case 0x0020: // DEL
                     {
                         cpu.Pop();
@@ -405,6 +431,44 @@ namespace Ashen
                         var a = cpu.Pop();
                         var b = cpu.Pop();
                         cpu.Push((ushort)(b & a));
+                        return true;
+                    }
+                case 0x003B: // INCB
+                    {
+                        var value = cpu.PeekSecond();
+                        cpu.ReplaceSecond((ushort)(value + 1));
+                        return true;
+                    }
+                case 0x003C: // DECB
+                    {
+                        var value = cpu.PeekSecond();
+                        cpu.ReplaceSecond((ushort)(value - 1));
+                        return true;
+                    }
+                case 0x003D: // XBX
+                    {
+                        var temp = cpu.PeekSecond();
+                        cpu.ReplaceSecond(cpu.X);
+                        cpu.X = temp;
+                        return true;
+                    }
+                case 0x003E: // ADBX
+                    {
+                        var b = cpu.PeekSecond();
+                        var x = cpu.X;
+                        var sum = (uint)(x + b);
+                        var result = (ushort)sum;
+                        cpu.X = result;
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(x, b, result));
+                        return true;
+                    }
+                case 0x003F: // ADXB
+                    {
+                        var b = cpu.PeekSecond();
+                        var sum = (uint)(b + cpu.X);
+                        var result = (ushort)sum;
+                        cpu.ReplaceSecond(result);
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(b, cpu.X, result));
                         return true;
                     }
                 default:
