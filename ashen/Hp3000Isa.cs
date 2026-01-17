@@ -334,6 +334,25 @@ namespace Ashen
                         cpu.ReplaceTop((ushort)(value - 1));
                         return true;
                     }
+                case 0x001D: // XAX
+                    {
+                        var temp = cpu.Peek();
+                        cpu.ReplaceTop(cpu.X);
+                        cpu.X = temp;
+                        return true;
+                    }
+                case 0x001E: // ADAX
+                    {
+                        var a = cpu.Peek();
+                        cpu.X = (ushort)(cpu.X + a);
+                        return true;
+                    }
+                case 0x001F: // ADXA
+                    {
+                        var a = cpu.Peek();
+                        cpu.ReplaceTop((ushort)(a + cpu.X));
+                        return true;
+                    }
                 case 0x0020: // DEL
                     {
                         cpu.Pop();
@@ -405,6 +424,37 @@ namespace Ashen
                         var a = cpu.Pop();
                         var b = cpu.Pop();
                         cpu.Push((ushort)(b & a));
+                        return true;
+                    }
+                case 0x003B: // INCB
+                    {
+                        var value = cpu.PeekSecond();
+                        cpu.ReplaceSecond((ushort)(value + 1));
+                        return true;
+                    }
+                case 0x003C: // DECB
+                    {
+                        var value = cpu.PeekSecond();
+                        cpu.ReplaceSecond((ushort)(value - 1));
+                        return true;
+                    }
+                case 0x003D: // XBX
+                    {
+                        var temp = cpu.PeekSecond();
+                        cpu.ReplaceSecond(cpu.X);
+                        cpu.X = temp;
+                        return true;
+                    }
+                case 0x003E: // ADBX
+                    {
+                        var b = cpu.PeekSecond();
+                        cpu.X = (ushort)(cpu.X + b);
+                        return true;
+                    }
+                case 0x003F: // ADXB
+                    {
+                        var b = cpu.PeekSecond();
+                        cpu.ReplaceSecond((ushort)(b + cpu.X));
                         return true;
                     }
                 default:

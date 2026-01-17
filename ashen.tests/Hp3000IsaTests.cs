@@ -460,6 +460,51 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Xax_ShouldExchangeAWithX()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x1234);
+        cpu.X = 0x5678;
+        isa.TryExecute(0x001D, cpu);
+        
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0x5678, cpu.Ra);
+        Assert.Equal(0x1234, cpu.X);
+    }
+
+    [Fact]
+    public void Adax_ShouldAddAToX()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x0010);
+        cpu.X = 0x0020;
+        isa.TryExecute(0x001E, cpu);
+        
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0x0010, cpu.Ra);
+        Assert.Equal(0x0030, cpu.X);
+    }
+
+    [Fact]
+    public void Adxa_ShouldAddXToA()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x0010);
+        cpu.X = 0x0020;
+        isa.TryExecute(0x001F, cpu);
+        
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0x0030, cpu.Ra);
+        Assert.Equal(0x0020, cpu.X);
+    }
+
+    [Fact]
     public void Del_ShouldRemoveTopOfStack()
     {
         var cpu = CreateCpu();
@@ -965,5 +1010,86 @@ public class Hp3000IsaTests
         isa.TryExecute(0x0021, cpu);
         
         Assert.True(cpu.Halted);
+    }
+
+    [Fact]
+    public void Incb_ShouldIncrementSecondOfStack()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(10);
+        cpu.Push(20);
+        isa.TryExecute(0x003B, cpu);
+        
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(20, cpu.Ra);
+        Assert.Equal(11, cpu.Rb);
+    }
+
+    [Fact]
+    public void Decb_ShouldDecrementSecondOfStack()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(10);
+        cpu.Push(20);
+        isa.TryExecute(0x003C, cpu);
+        
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(20, cpu.Ra);
+        Assert.Equal(9, cpu.Rb);
+    }
+
+    [Fact]
+    public void Xbx_ShouldExchangeBWithX()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x1234);
+        cpu.Push(0xABCD);
+        cpu.X = 0x5678;
+        isa.TryExecute(0x003D, cpu);
+        
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0xABCD, cpu.Ra);
+        Assert.Equal(0x5678, cpu.Rb);
+        Assert.Equal(0x1234, cpu.X);
+    }
+
+    [Fact]
+    public void Adbx_ShouldAddBToX()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x0010);
+        cpu.Push(0x0100);
+        cpu.X = 0x0020;
+        isa.TryExecute(0x003E, cpu);
+        
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0100, cpu.Ra);
+        Assert.Equal(0x0010, cpu.Rb);
+        Assert.Equal(0x0030, cpu.X);
+    }
+
+    [Fact]
+    public void Adxb_ShouldAddXToB()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x0010);
+        cpu.Push(0x0100);
+        cpu.X = 0x0020;
+        isa.TryExecute(0x003F, cpu);
+        
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0100, cpu.Ra);
+        Assert.Equal(0x0030, cpu.Rb);
+        Assert.Equal(0x0020, cpu.X);
     }
 }
