@@ -484,8 +484,8 @@ public class Hp3000IsaTests
         cpu.X = 0x0020;
         isa.TryExecute(0x001E, cpu);
         
-        Assert.Equal(1, cpu.Sr);
-        Assert.Equal(0x0010, cpu.Ra);
+        Assert.Equal(0, cpu.Sr);
+        Assert.Equal(0, cpu.StackDepth);
         Assert.Equal(0x0030, cpu.X);
     }
 
@@ -499,6 +499,8 @@ public class Hp3000IsaTests
         cpu.X = 0x7FFF;
         isa.TryExecute(0x001E, cpu);
         
+        Assert.Equal(0, cpu.Sr);
+        Assert.Equal(0, cpu.StackDepth);
         Assert.Equal(0x8000, cpu.X);
         Assert.Equal(0x0900, cpu.Sta); // Overflow and CCL
     }

@@ -13,6 +13,7 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `NOP` | 000000 | No operation. Does nothing. |
 | `DELB` | 000001 | Delete B. Drops the second stack word. |
 | `DDEL` | 000002 | Double delete. Pops two values from stack. |
+| `ZROX` | 000003 | Zero X register. |
 | `DCMP` | 000010 | Double compare: (D,C) vs (B,A) sets CC and pops both. |
 | `DADD` | 000011 | Double add: (D,C) + (B,A) → (B,A). |
 | `INCX` | 000004 | Increment X register. |
@@ -30,7 +31,11 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `XCH` | 000032 | Exchange top two stack items. |
 | `INCA` | 000033 | Increment A (top of stack). |
 | `DECA` | 000034 | Decrement A (top of stack). |
+| `XAX` | 000035 | Exchange A and X. |
+| `ADAX` | 000036 | Add A + X → X, update CC, pop A. |
+| `ADXA` | 000037 | Add A + X → A, update CC (no stack change). |
 | `DEL` | 000040 | Delete top of stack. |
+| `ZROB` | 000041 | Zero B (second stack word). |
 | `STBX` | 000026 | Copy RB into X (no stack change). |
 | `LDXB` | 000042 | Copy X into RB (no stack change). |
 | `STAX` | 000043 | Pop into X. |
@@ -41,6 +46,11 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `OR` | 000065 | Bitwise OR: b \| a → result. |
 | `XOR` | 000066 | Bitwise XOR: b ^ a → result. |
 | `AND` | 000067 | Bitwise AND: b & a → result. |
+| `INCB` | 000073 | Increment B (second stack word). |
+| `DECB` | 000074 | Decrement B (second stack word). |
+| `XBX` | 000075 | Exchange B and X. |
+| `ADBX` | 000076 | Add B + X → X, update CC (no stack change). |
+| `ADXB` | 000077 | Add B + X → B, update CC. |
 
 ## Branch Instructions
 
@@ -96,6 +106,11 @@ Overflow/carry branches use separate short formats:
 | `HALT` | `030360` | Halt execution. |
 | `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS word. |
 | `RIO` | `0301KK` | Read I/O; K (4-bit device code), pushes low byte. |
+| `IABZ` | `0103KK` | Increment A; if zero then branch PC±disp (optional ,I). |
+| `IXBZ` | `0112KK` | Increment X; if zero then branch PC±disp (optional ,I). |
+| `DXBZ` | `0113KK` | Decrement X; if zero then branch PC±disp (optional ,I). |
+| `SCAL` | `0304XX` | System call. Operand selects entry/label. |
+| `SXIT` | `0320XX` | Exit system call. Pops return address, discards locals. |
 
 Device codes: `0` = `tty`, `1` = `lpt` (processed), `2` = `lpt` (raw word).
 
@@ -122,9 +137,9 @@ Ashen currently models `P`, `DB`, `X`, and `STA`, plus the register stack
 | Octal | Mnemonic | Status | Octal | Mnemonic | Status |
 |-------|----------|--------|-------|----------|--------|
 | 000 | **NOP** | ✓ | 040 | **DEL** | ✓ |
-| 001 | **DELB** | ✓ | 041 | ZROB | - |
+| 001 | **DELB** | ✓ | 041 | **ZROB** | ✓ |
 | 002 | **DDEL** | ✓ | 042 | **LDXB** | ✓ |
-| 003 | ZROX | - | 043 | **STAX** | ✓ |
+| 003 | **ZROX** | ✓ | 043 | **STAX** | ✓ |
 | 004 | **INCX** | ✓ | 044 | **LDXA** | ✓ |
 | 005 | **DECX** | ✓ | 045 | **DUP** | ✓ |
 | 006 | **ZERO** | ✓ | 046 | **DDUP** | ✓ |
@@ -148,8 +163,8 @@ Ashen currently models `P`, `DB`, `X`, and `STA`, plus the register stack
 | 030 | DFLT | - | 070 | FIXR | - |
 | 031 | BTST | - | 071 | FIXT | - |
 | 032 | **XCH** | ✓ | 072 | UNK | - |
-| 033 | **INCA** | ✓ | 073 | INCB | - |
-| 034 | **DECA** | ✓ | 074 | DECB | - |
-| 035 | XAX | - | 075 | XBX | - |
-| 036 | ADAX | - | 076 | ADBX | - |
-| 037 | ADXA | - | 077 | ADXB | - |
+| 033 | **INCA** | ✓ | 073 | **INCB** | ✓ |
+| 034 | **DECA** | ✓ | 074 | **DECB** | ✓ |
+| 035 | **XAX** | ✓ | 075 | **XBX** | ✓ |
+| 036 | **ADAX** | ✓ | 076 | **ADBX** | ✓ |
+| 037 | **ADXA** | ✓ | 077 | **ADXB** | ✓ |

@@ -343,7 +343,7 @@ namespace Ashen
                     }
                 case 0x001E: // ADAX
                     {
-                        var a = cpu.Peek();
+                        var a = cpu.Pop();
                         var x = cpu.X;
                         var sum = (uint)(x + a);
                         var result = (ushort)sum;
