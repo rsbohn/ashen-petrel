@@ -393,6 +393,40 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Lmpy_ShouldMultiplyToDoubleword()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0003);
+        cpu.Push(0x0004);
+        isa.TryExecute(0x0032, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x000C, cpu.Ra); // low
+        Assert.Equal(0x0000, cpu.Rb); // high
+        Assert.Equal(0x0000, cpu.Sta & 0x0400);
+        Assert.Equal(0x0000, cpu.Sta & 0x0300);
+    }
+
+    [Fact]
+    public void Lmpy_WithHighWord_ShouldSetCarryAndCc()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x1000);
+        cpu.Push(0x1000);
+        isa.TryExecute(0x0032, cpu);
+
+        Assert.Equal(2, cpu.Sr);
+        Assert.Equal(0x0000, cpu.Ra); // low
+        Assert.Equal(0x0100, cpu.Rb); // high
+        Assert.Equal(0x0400, cpu.Sta & 0x0400);
+        Assert.Equal(0x0200, cpu.Sta & 0x0300);
+    }
+
+    [Fact]
     public void Neg_ShouldNegateNumber()
     {
         var cpu = CreateCpu();

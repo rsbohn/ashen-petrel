@@ -1,4 +1,5 @@
 ;; Find the largest prime factor of NU
+;; For a solution see sd/pfind.asm
     ORG 200
 START:
     LDI 0
@@ -28,4 +29,3 @@ F0: DW #071
 F1: DW #839
 F2: DW #1471
 F3: DW #6857
-

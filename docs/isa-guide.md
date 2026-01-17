@@ -23,6 +23,7 @@ The HP 3000 uses 16-bit words for instructions. Format 2 instructions pack two 6
 | `ADD` | 000020 | Add: b + a → result. |
 | `SUB` | 000021 | Subtract: b - a → result. |
 | `MPY` | 000022 | Multiply: b * a → result. |
+| `LMPY` | 000062 | Logical multiply: b * a → (high, low), low on TOS. |
 | `DIV` | 000023 | Divide: b / a → quotient, remainder on TOS. |
 | `LDIV` | 000063 | Long divide: (C,B) / A → quotient, remainder on TOS. |
 | `DIVL` | 000014 | Long divide: (C,B) / A → quotient, remainder on TOS. |
@@ -154,7 +155,7 @@ Ashen currently models `P`, `DB`, `X`, and `STA`, plus the register stack
 | 017 | CMP | - | 057 | LCMP | - |
 | 020 | **ADD** | ✓ | 060 | LADD | - |
 | 021 | **SUB** | ✓ | 061 | LSUB | - |
-| 022 | **MPY** | ✓ | 062 | LMPY | - |
+| 022 | **MPY** | ✓ | 062 | **LMPY** | ✓ |
 | 023 | **DIV** | ✓ | 063 | **LDIV** | ✓ |
 | 024 | **NEG** | ✓ | 064 | **NOT** | ✓ |
 | 025 | **TEST** | ✓ | 065 | **OR** | ✓ |

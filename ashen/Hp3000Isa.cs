@@ -269,6 +269,18 @@ namespace Ashen
                         UpdateDivFlags(cpu, quotient, overflow: false);
                         return true;
                     }
+                case 0x0032: // LMPY
+                    {
+                        var a = cpu.Pop();
+                        var b = cpu.Pop();
+                        var product = (uint)(b * a);
+                        var high = (ushort)(product >> 16);
+                        var low = (ushort)(product & 0xFFFF);
+                        cpu.Push(high);
+                        cpu.Push(low);
+                        UpdateLogicalMultiplyFlags(cpu, low, high != 0);
+                        return true;
+                    }
                 case 0x0033: // LDIV
                     {
                         var a = cpu.Pop();
@@ -2000,6 +2012,23 @@ namespace Ashen
                 updated |= StatusO;
             }
 
+            if (carry)
+            {
+                updated |= StatusC;
+            }
+
+            cpu.Sta = updated;
+        }
+
+        private static void UpdateLogicalMultiplyFlags(Hp3000Cpu cpu, ushort result, bool carry)
+        {
+            var cc = result == 0
+                ? StatusCce
+                : (result & 0x8000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO | StatusC));
+            updated |= cc;
             if (carry)
             {
                 updated |= StatusC;
