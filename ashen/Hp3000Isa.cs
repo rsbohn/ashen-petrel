@@ -344,13 +344,20 @@ namespace Ashen
                 case 0x001E: // ADAX
                     {
                         var a = cpu.Peek();
-                        cpu.X = (ushort)(cpu.X + a);
+                        var x = cpu.X;
+                        var sum = (uint)(x + a);
+                        var result = (ushort)sum;
+                        cpu.X = result;
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(x, a, result));
                         return true;
                     }
                 case 0x001F: // ADXA
                     {
                         var a = cpu.Peek();
-                        cpu.ReplaceTop((ushort)(a + cpu.X));
+                        var sum = (uint)(a + cpu.X);
+                        var result = (ushort)sum;
+                        cpu.ReplaceTop(result);
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(a, cpu.X, result));
                         return true;
                     }
                 case 0x0020: // DEL
@@ -448,13 +455,20 @@ namespace Ashen
                 case 0x003E: // ADBX
                     {
                         var b = cpu.PeekSecond();
-                        cpu.X = (ushort)(cpu.X + b);
+                        var x = cpu.X;
+                        var sum = (uint)(x + b);
+                        var result = (ushort)sum;
+                        cpu.X = result;
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(x, b, result));
                         return true;
                     }
                 case 0x003F: // ADXB
                     {
                         var b = cpu.PeekSecond();
-                        cpu.ReplaceSecond((ushort)(b + cpu.X));
+                        var sum = (uint)(b + cpu.X);
+                        var result = (ushort)sum;
+                        cpu.ReplaceSecond(result);
+                        UpdateAddSubFlags(cpu, result, sum > 0xFFFF, IsAddOverflow(b, cpu.X, result));
                         return true;
                     }
                 default:

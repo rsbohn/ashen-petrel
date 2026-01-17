@@ -490,6 +490,20 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Adax_WithOverflow_ShouldSetFlags()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x0001);
+        cpu.X = 0x7FFF;
+        isa.TryExecute(0x001E, cpu);
+        
+        Assert.Equal(0x8000, cpu.X);
+        Assert.Equal(0x0900, cpu.Sta); // Overflow and CCL
+    }
+
+    [Fact]
     public void Adxa_ShouldAddXToA()
     {
         var cpu = CreateCpu();
@@ -502,6 +516,20 @@ public class Hp3000IsaTests
         Assert.Equal(1, cpu.Sr);
         Assert.Equal(0x0030, cpu.Ra);
         Assert.Equal(0x0020, cpu.X);
+    }
+
+    [Fact]
+    public void Adxa_WithCarry_ShouldSetFlags()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0xFFFF);
+        cpu.X = 0x0001;
+        isa.TryExecute(0x001F, cpu);
+        
+        Assert.Equal(0x0000, cpu.Ra);
+        Assert.Equal(0x0600, cpu.Sta); // Carry and CCE
     }
 
     [Fact]
@@ -1077,6 +1105,21 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Adbx_WithOverflow_ShouldSetFlags()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0x0001);
+        cpu.Push(0x0100);
+        cpu.X = 0x7FFF;
+        isa.TryExecute(0x003E, cpu);
+        
+        Assert.Equal(0x8000, cpu.X);
+        Assert.Equal(0x0900, cpu.Sta); // Overflow and CCL
+    }
+
+    [Fact]
     public void Adxb_ShouldAddXToB()
     {
         var cpu = CreateCpu();
@@ -1091,5 +1134,20 @@ public class Hp3000IsaTests
         Assert.Equal(0x0100, cpu.Ra);
         Assert.Equal(0x0030, cpu.Rb);
         Assert.Equal(0x0020, cpu.X);
+    }
+
+    [Fact]
+    public void Adxb_WithCarry_ShouldSetFlags()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        
+        cpu.Push(0xFFFF);
+        cpu.Push(0x0100);
+        cpu.X = 0x0001;
+        isa.TryExecute(0x003F, cpu);
+        
+        Assert.Equal(0x0000, cpu.Rb);
+        Assert.Equal(0x0600, cpu.Sta); // Carry and CCE
     }
 }
