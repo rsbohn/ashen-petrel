@@ -1186,4 +1186,58 @@ public class Hp3000IsaTests
         Assert.Equal(0x0000, cpu.Rb);
         Assert.Equal(0x0600, cpu.Sta); // Carry and CCE
     }
+
+    [Fact]
+    public void TryAssemble_Dlsl_WithX_ShouldAssemble()
+    {
+        var isa = new Hp3000Isa();
+
+        Assert.True(isa.TryAssemble("DLSL", "1,X", out var opcode));
+
+        Assert.Equal(0x1681, opcode);
+    }
+
+    [Fact]
+    public void Disassemble_Dlsr_WithX_ShouldReturnMnemonic()
+    {
+        var isa = new Hp3000Isa();
+
+        var disassembly = isa.Disassemble(0x16C1);
+
+        Assert.Equal("DLSR 1,X", disassembly);
+    }
+
+    [Fact]
+    public void ExecuteDlsl_ShouldShiftLeftLogical()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x4000);
+        cpu.Push(0x0001);
+        cpu.Sta = 0;
+
+        isa.TryExecuteWord(0x1481, cpu);
+
+        Assert.Equal(0x0002, cpu.Ra);
+        Assert.Equal(0x8000, cpu.Rb);
+        Assert.Equal(0x0100, cpu.Sta);
+    }
+
+    [Fact]
+    public void ExecuteDlsr_ShouldShiftRightLogicalAndSetCarry()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(0x0000);
+        cpu.Push(0x0001);
+        cpu.Sta = 0;
+
+        isa.TryExecuteWord(0x14C1, cpu);
+
+        Assert.Equal(0x0000, cpu.Ra);
+        Assert.Equal(0x0000, cpu.Rb);
+        Assert.Equal(0x0600, cpu.Sta);
+    }
 }

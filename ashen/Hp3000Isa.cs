@@ -20,7 +20,7 @@ namespace Ashen
         private const ushort LoadDispSign = 0x0100;
         private const ushort LoadDispValueMask = 0x00FF;
         private const ushort IabzMask = 0x7FC0;
-        private const ushort IabzBase = 0x10C0;
+        private const ushort IabzBase = 0x11C0; // 010700 octal
         private const ushort IabzIndirectFlag = 0x0080;
         private const ushort IabzBackFlag = 0x0020;
         private const ushort IabzDispMask = 0x001F;
@@ -78,6 +78,18 @@ namespace Ashen
         private const ushort SxitBase = 0x3400; // 032000 octal
         private const ushort SxitMask = 0xFF00;
         private const ushort SxitOperandMask = 0x00FF;
+        private const ushort ShiftMask = 0xFFC0;
+        private const ushort AslBase = 0x1000; // 010000 octal
+        private const ushort AsrBase = 0x1040; // 010100 octal
+        private const ushort LslBase = 0x1080; // 010200 octal
+        private const ushort LsrBase = 0x10C0; // 010300 octal
+        private const ushort ShiftCountMask = 0x003F;
+        private const ushort DaslMask = 0xFDC0;
+        private const ushort DaslBase = 0x1400; // 012000 octal
+        private const ushort DasrBase = 0x1440; // 012100 octal
+        private const ushort DlslBase = 0x1480; // 012200 octal
+        private const ushort DlsrBase = 0x14C0; // 012300 octal
+        private const ushort DaslXFlag = 0x0200;
         private const ushort DdivWord = 0x2179; // 020571 octal
         private const ushort StatusCcl = 0x0100;
         private const ushort StatusCce = 0x0200;
@@ -507,6 +519,54 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & ShiftMask) == AslBase)
+            {
+                ExecuteAsl((ushort)(word & ShiftCountMask), cpu);
+                return true;
+            }
+
+            if ((word & ShiftMask) == AsrBase)
+            {
+                ExecuteAsr((ushort)(word & ShiftCountMask), cpu);
+                return true;
+            }
+
+            if ((word & ShiftMask) == LslBase)
+            {
+                ExecuteLsl((ushort)(word & ShiftCountMask), cpu);
+                return true;
+            }
+
+            if ((word & ShiftMask) == LsrBase)
+            {
+                ExecuteLsr((ushort)(word & ShiftCountMask), cpu);
+                return true;
+            }
+
+            if ((word & DaslMask) == DaslBase)
+            {
+                ExecuteDasl((ushort)(word & ShiftCountMask), (word & DaslXFlag) != 0, cpu);
+                return true;
+            }
+
+            if ((word & DaslMask) == DasrBase)
+            {
+                ExecuteDasr((ushort)(word & ShiftCountMask), (word & DaslXFlag) != 0, cpu);
+                return true;
+            }
+
+            if ((word & DaslMask) == DlslBase)
+            {
+                ExecuteDlsl((ushort)(word & ShiftCountMask), (word & DaslXFlag) != 0, cpu);
+                return true;
+            }
+
+            if ((word & DaslMask) == DlsrBase)
+            {
+                ExecuteDlsr((ushort)(word & ShiftCountMask), (word & DaslXFlag) != 0, cpu);
+                return true;
+            }
+
             if (word == DdivWord)
             {
                 var a = cpu.Pop();
@@ -850,6 +910,54 @@ namespace Ashen
                 return $"SXIT {ToOctal3((ushort)(opcode & SxitOperandMask))}";
             }
 
+            if ((opcode & ShiftMask) == AslBase)
+            {
+                return $"ASL {Convert.ToString(opcode & ShiftCountMask, 8)}";
+            }
+
+            if ((opcode & ShiftMask) == AsrBase)
+            {
+                return $"ASR {Convert.ToString(opcode & ShiftCountMask, 8)}";
+            }
+
+            if ((opcode & ShiftMask) == LslBase)
+            {
+                return $"LSL {Convert.ToString(opcode & ShiftCountMask, 8)}";
+            }
+
+            if ((opcode & ShiftMask) == LsrBase)
+            {
+                return $"LSR {Convert.ToString(opcode & ShiftCountMask, 8)}";
+            }
+
+            if ((opcode & DaslMask) == DaslBase)
+            {
+                var count = Convert.ToString(opcode & ShiftCountMask, 8);
+                var suffix = (opcode & DaslXFlag) != 0 ? ",X" : "";
+                return $"DASL {count}{suffix}";
+            }
+
+            if ((opcode & DaslMask) == DasrBase)
+            {
+                var count = Convert.ToString(opcode & ShiftCountMask, 8);
+                var suffix = (opcode & DaslXFlag) != 0 ? ",X" : "";
+                return $"DASR {count}{suffix}";
+            }
+
+            if ((opcode & DaslMask) == DlslBase)
+            {
+                var count = Convert.ToString(opcode & ShiftCountMask, 8);
+                var suffix = (opcode & DaslXFlag) != 0 ? ",X" : "";
+                return $"DLSL {count}{suffix}";
+            }
+
+            if ((opcode & DaslMask) == DlsrBase)
+            {
+                var count = Convert.ToString(opcode & ShiftCountMask, 8);
+                var suffix = (opcode & DaslXFlag) != 0 ? ",X" : "";
+                return $"DLSR {count}{suffix}";
+            }
+
             if (opcode == HaltWord)
             {
                 return "HALT 0";
@@ -980,6 +1088,46 @@ namespace Ashen
             if (mnemonic.Equals("SXIT", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleSxit(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("ASL", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleShift(operand, AslBase, out opcode);
+            }
+
+            if (mnemonic.Equals("ASR", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleShift(operand, AsrBase, out opcode);
+            }
+
+            if (mnemonic.Equals("LSL", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleShift(operand, LslBase, out opcode);
+            }
+
+            if (mnemonic.Equals("LSR", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleShift(operand, LsrBase, out opcode);
+            }
+
+            if (mnemonic.Equals("DASL", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleDasl(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("DASR", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleDasr(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("DLSL", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleDlsl(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("DLSR", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleDlsr(operand, out opcode);
             }
 
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
@@ -1148,6 +1296,171 @@ namespace Ashen
             }
 
             cpu.Pc = returnAddress & 0x7fff;
+        }
+
+        private static void ExecuteAsl(ushort count, Hp3000Cpu cpu)
+        {
+            var value = cpu.Peek();
+            var sign = (ushort)(value & 0x8000);
+            var magnitude = (ushort)(value & 0x7fff);
+            var shifted = count >= 15
+                ? (ushort)0
+                : (ushort)((magnitude << count) & 0x7fff);
+            var result = (ushort)(sign | shifted);
+            cpu.ReplaceTop(result);
+            UpdateCcFlags(cpu, result);
+        }
+
+        private static void ExecuteAsr(ushort count, Hp3000Cpu cpu)
+        {
+            var value = cpu.Peek();
+            ushort result;
+            if (count >= 16)
+            {
+                result = (value & 0x8000) != 0 ? (ushort)0xFFFF : (ushort)0;
+            }
+            else
+            {
+                result = (ushort)(((short)value) >> count);
+            }
+
+            cpu.ReplaceTop(result);
+            UpdateCcFlags(cpu, result);
+        }
+
+        private static void ExecuteLsl(ushort count, Hp3000Cpu cpu)
+        {
+            var value = cpu.Peek();
+            var result = count >= 16 ? (ushort)0 : (ushort)(value << count);
+            cpu.ReplaceTop(result);
+            UpdateCcFlags(cpu, result);
+        }
+
+        private static void ExecuteLsr(ushort count, Hp3000Cpu cpu)
+        {
+            var value = cpu.Peek();
+            var result = count >= 16 ? (ushort)0 : (ushort)(value >> count);
+            cpu.ReplaceTop(result);
+            UpdateCcFlags(cpu, result);
+        }
+
+        private static void ExecuteDasl(ushort count, bool useX, Hp3000Cpu cpu)
+        {
+            var shift = (ushort)((count + (useX ? cpu.X : 0)) & ShiftCountMask);
+            var low = cpu.Pop();
+            var high = cpu.Pop();
+            var signBit = (uint)(high & 0x8000) << 16;
+            var magnitude = ((uint)(high & 0x7FFF) << 16) | low;
+            var carry = false;
+            uint shiftedMagnitude;
+            if (shift == 0)
+            {
+                shiftedMagnitude = magnitude;
+            }
+            else if (shift >= 31)
+            {
+                carry = magnitude != 0;
+                shiftedMagnitude = 0;
+            }
+            else
+            {
+                var shiftedOutMask = ((1u << shift) - 1) << (31 - shift);
+                carry = (magnitude & shiftedOutMask) != 0;
+                shiftedMagnitude = (magnitude << shift) & 0x7FFFFFFF;
+            }
+
+            var result = signBit | shiftedMagnitude;
+            cpu.Push((ushort)(result >> 16));
+            cpu.Push((ushort)(result & 0xFFFF));
+            UpdateDoubleCcCarryFlags(cpu, result, carry);
+        }
+
+        private static void ExecuteDasr(ushort count, bool useX, Hp3000Cpu cpu)
+        {
+            var shift = (ushort)((count + (useX ? cpu.X : 0)) & ShiftCountMask);
+            var low = cpu.Pop();
+            var high = cpu.Pop();
+            var combined = ((uint)high << 16) | low;
+            var signFill = (high & 0x8000) != 0 ? 0xFFFFFFFFu : 0u;
+            var carry = false;
+            uint result;
+            if (shift == 0)
+            {
+                result = combined;
+            }
+            else if (shift >= 32)
+            {
+                carry = (combined & 0x7FFFFFFF) != 0;
+                result = signFill;
+            }
+            else
+            {
+                var shiftedOutMask = (1u << shift) - 1;
+                carry = (combined & shiftedOutMask) != 0;
+                result = (combined >> shift) | (signFill << (32 - shift));
+            }
+
+            cpu.Push((ushort)(result >> 16));
+            cpu.Push((ushort)(result & 0xFFFF));
+            UpdateDoubleCcCarryFlags(cpu, result, carry);
+        }
+
+        private static void ExecuteDlsl(ushort count, bool useX, Hp3000Cpu cpu)
+        {
+            var shift = (ushort)((count + (useX ? cpu.X : 0)) & ShiftCountMask);
+            var low = cpu.Pop();
+            var high = cpu.Pop();
+            var combined = ((uint)high << 16) | low;
+            var carry = false;
+            uint result;
+            if (shift == 0)
+            {
+                result = combined;
+            }
+            else if (shift >= 32)
+            {
+                carry = combined != 0;
+                result = 0;
+            }
+            else
+            {
+                var shiftedOutMask = 0xFFFFFFFFu << (32 - shift);
+                carry = (combined & shiftedOutMask) != 0;
+                result = combined << shift;
+            }
+
+            cpu.Push((ushort)(result >> 16));
+            cpu.Push((ushort)(result & 0xFFFF));
+            UpdateDoubleCcCarryFlags(cpu, result, carry);
+        }
+
+        private static void ExecuteDlsr(ushort count, bool useX, Hp3000Cpu cpu)
+        {
+            var shift = (ushort)((count + (useX ? cpu.X : 0)) & ShiftCountMask);
+            var low = cpu.Pop();
+            var high = cpu.Pop();
+            var combined = ((uint)high << 16) | low;
+            var carry = false;
+            uint result;
+            if (shift == 0)
+            {
+                result = combined;
+            }
+            else if (shift >= 32)
+            {
+                carry = combined != 0;
+                result = 0;
+            }
+            else
+            {
+                var shiftedOutMask = (1u << shift) - 1;
+                carry = (combined & shiftedOutMask) != 0;
+                result = combined >> shift;
+            }
+
+            cpu.Push((ushort)(result >> 16));
+            cpu.Push((ushort)(result & 0xFFFF));
+            UpdateDoubleCcCarryFlags(cpu, result, carry);
         }
 
         private static bool TryExecuteSpecial(ushort word, Hp3000Cpu cpu)
@@ -2136,6 +2449,23 @@ namespace Ashen
             cpu.Sta = updated;
         }
 
+        private static void UpdateDoubleCcCarryFlags(Hp3000Cpu cpu, uint result, bool carry)
+        {
+            var cc = result == 0
+                ? StatusCce
+                : (result & 0x80000000) != 0
+                    ? StatusCcl
+                    : StatusCcg;
+            var updated = (ushort)(cpu.Sta & ~(StatusCcMask | StatusO | StatusC));
+            updated |= cc;
+            if (carry)
+            {
+                updated |= StatusC;
+            }
+
+            cpu.Sta = updated;
+        }
+
         private static bool TryParsePcRelative(
             string basePart,
             bool requirePrefix,
@@ -2226,6 +2556,187 @@ namespace Ashen
             }
 
             opcode = (ushort)(SxitBase | value);
+            return true;
+        }
+
+        private static bool TryAssembleShift(string operand, ushort baseOpcode, out ushort opcode)
+        {
+            opcode = 0;
+            if (!TryParseOctal(operand, out var value))
+            {
+                return false;
+            }
+
+            if (value > ShiftCountMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(baseOpcode | value);
+            return true;
+        }
+
+        private static bool TryAssembleDasl(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            if (!TryParseOctal(parts[0].Trim(), out var value))
+            {
+                return false;
+            }
+
+            if (value > ShiftCountMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(DaslBase | value);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= DaslXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssembleDasr(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            if (!TryParseOctal(parts[0].Trim(), out var value))
+            {
+                return false;
+            }
+
+            if (value > ShiftCountMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(DasrBase | value);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= DaslXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssembleDlsl(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            if (!TryParseOctal(parts[0].Trim(), out var value))
+            {
+                return false;
+            }
+
+            if (value > ShiftCountMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(DlslBase | value);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= DaslXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssembleDlsr(string operand, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            if (!TryParseOctal(parts[0].Trim(), out var value))
+            {
+                return false;
+            }
+
+            if (value > ShiftCountMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(DlsrBase | value);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= DaslXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
 

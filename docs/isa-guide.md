@@ -107,11 +107,19 @@ Overflow/carry branches use separate short formats:
 | `HALT` | `030360` | Halt execution. |
 | `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS word. |
 | `RIO` | `0301KK` | Read I/O; K (4-bit device code), pushes low byte. |
-| `IABZ` | `0103KK` | Increment A; if zero then branch PC±disp (optional ,I). |
+| `IABZ` | `0107KK` | Increment A; if zero then branch PC±disp (optional ,I). |
 | `IXBZ` | `0112KK` | Increment X; if zero then branch PC±disp (optional ,I). |
 | `DXBZ` | `0113KK` | Decrement X; if zero then branch PC±disp (optional ,I). |
 | `SCAL` | `0304XX` | System call. Operand selects entry/label. |
 | `SXIT` | `0320XX` | Exit system call. Pops return address, discards locals. |
+| `ASL` | `0100NN` | Arithmetic shift left TOS by NN, preserve sign bit. |
+| `ASR` | `0101NN` | Arithmetic shift right TOS by NN, preserve sign bit. |
+| `LSL` | `0102NN` | Logical shift left TOS by NN. |
+| `LSR` | `0103NN` | Logical shift right TOS by NN. |
+| `DASL` | `0120NN` | Double arithmetic shift left by NN (optional ,X count add). |
+| `DASR` | `0121NN` | Double arithmetic shift right by NN (optional ,X count add). |
+| `DLSL` | `0122NN` | Double logical shift left by NN (optional ,X count add). |
+| `DLSR` | `0123NN` | Double logical shift right by NN (optional ,X count add). |
 
 Device codes: `0` = `tty`, `1` = `lpt` (processed), `2` = `lpt` (raw word).
 

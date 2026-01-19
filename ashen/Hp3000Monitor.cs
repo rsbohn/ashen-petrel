@@ -532,6 +532,14 @@ namespace Ashen
                 || token.Equals("STD", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("SCAL", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("SXIT", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("ASL", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("ASR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("LSL", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("LSR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("DASL", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("DASR", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("DLSL", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("DLSR", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
                 || token.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
@@ -841,6 +849,11 @@ namespace Ashen
                         return;
                     }
                 }
+                else if (IsOperandMnemonic(mnemonic))
+                {
+                    Console.WriteLine($"asm {path}:{asmLine.LineNumber}: {mnemonic} requires an operand");
+                    return;
+                }
 
                 if (_isa.TryAssemble(mnemonic, out var opcode))
                 {
@@ -1124,7 +1137,7 @@ namespace Ashen
                 return true;
             }
 
-            return symbols.TryGetValue(token, out value);
+            return TryResolveQualifiedSymbol(token, symbols, out value);
         }
 
         private static bool TryResolveValue(string token, Dictionary<string, int> symbols, int address, out int value)
@@ -1140,7 +1153,7 @@ namespace Ashen
                 return true;
             }
 
-            if (symbols.TryGetValue(token, out var symbolValue))
+            if (TryResolveQualifiedSymbol(token, symbols, out var symbolValue))
             {
                 value = symbolValue;
                 return true;
@@ -1163,7 +1176,7 @@ namespace Ashen
                 return true;
             }
 
-            if (symbols.TryGetValue(token, out var symbolValue))
+            if (TryResolveQualifiedSymbol(token, symbols, out var symbolValue))
             {
                 value = (uint)symbolValue;
                 return true;
@@ -1186,13 +1199,48 @@ namespace Ashen
                 return true;
             }
 
-            if (symbols.TryGetValue(token, out var symbolValue))
+            if (TryResolveQualifiedSymbol(token, symbols, out var symbolValue))
             {
                 value = (ulong)symbolValue;
                 return true;
             }
 
             value = 0;
+            return false;
+        }
+
+        private static bool TryResolveQualifiedSymbol(string token, Dictionary<string, int> symbols, out int value)
+        {
+            if (symbols.TryGetValue(token, out value))
+            {
+                return true;
+            }
+
+            var dotIndex = token.LastIndexOf('.');
+            if (dotIndex <= 0 || dotIndex == token.Length - 1)
+            {
+                return false;
+            }
+
+            var baseName = token[..dotIndex];
+            var qualifier = token[(dotIndex + 1)..];
+            if (!symbols.TryGetValue(baseName, out var baseValue))
+            {
+                return false;
+            }
+
+            if (qualifier.Equals("high", StringComparison.OrdinalIgnoreCase))
+            {
+                value = baseValue;
+                return true;
+            }
+
+            if (qualifier.Equals("low", StringComparison.OrdinalIgnoreCase))
+            {
+                value = (baseValue + 1) & 0x7fff;
+                return true;
+            }
+
             return false;
         }
 
@@ -1225,7 +1273,14 @@ namespace Ashen
                 || mnemonic.Equals("DXBZ", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("SCAL", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("SXIT", StringComparison.OrdinalIgnoreCase)
-                || mnemonic.Equals("HALT", StringComparison.OrdinalIgnoreCase);
+                || mnemonic.Equals("ASL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("ASR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("LSL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("LSR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("DASL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("DASR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("DLSL", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("DLSR", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsRelativeMnemonic(string mnemonic)
