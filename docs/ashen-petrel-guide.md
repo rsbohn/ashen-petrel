@@ -133,7 +133,8 @@ ash> x 100 4             # Verify the write
 
 ### Assembly
 
-- `asm <mnemonic> [addr]` - Assemble instruction
+- `asm <addr> <opcode> [operand]` - Assemble instruction
+- `asm <addr>` - Interactive assembler mode (enter `$` to quit)
 
 The ISA currently includes minimal opcodes:
 - `NOP` (0x0000) - No operation
@@ -141,7 +142,8 @@ The ISA currently includes minimal opcodes:
 
 Example:
 ```
-ash> asm NOP 100      # Assemble NOP at address 100
+ash> asm 100 NOP      # Assemble NOP at address 100
+ash> asm 200          # Interactive assembler prompt at 000200
 ash> dis 100          # Disassemble to verify
 100: NOP
 ```

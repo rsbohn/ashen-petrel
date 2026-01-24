@@ -38,7 +38,8 @@ d <addr> <value> [value2 ...]
 dis
 break <addr>
 breaks
-asm <mnemonic> [addr]
+asm <addr> <opcode> [operand]
+asm <addr>  (interactive mode)
 
 stack: . dup drop swap over + - and or xor invert
 

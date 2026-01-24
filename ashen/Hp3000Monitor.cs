@@ -145,7 +145,7 @@ namespace Ashen
             Console.WriteLine("Devices: devs status attach detach readblk writeblk lptcols lptradix");
             Console.WriteLine("Watch: watch unwatch watches");
             Console.WriteLine("Numbers are octal; use # for decimal.");
-            Console.WriteLine("Assembler: asm <mnemonic> [addr] | asm <file> | &asm | syms");
+            Console.WriteLine("Assembler: asm <addr> <opcode> [operand] | asm <file> | asm <addr> | &asm | syms");
             Console.WriteLine("Memory: txt <addr> /text/ (writes ASCII bytes + 0 terminator)");
         }
 
@@ -512,7 +512,7 @@ namespace Ashen
         {
             if (!stream.TryNext(out var token))
             {
-                Console.WriteLine("asm <mnemonic> [addr]");
+                Console.WriteLine("asm <addr> <opcode> [operand]");
                 return;
             }
 
@@ -522,59 +522,185 @@ namespace Ashen
                 return;
             }
 
-            if (token.Equals("BR", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("BRO", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("LDI", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("LDXI", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("LOAD", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("STOR", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("LDD", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("STD", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("SCAL", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("SXIT", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("ASL", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("ASR", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("LSL", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("LSR", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("DASL", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("DASR", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("DLSL", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("DLSR", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("IXBZ", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("IABZ", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("DXBZ", StringComparison.OrdinalIgnoreCase))
+            if (!TryParseNumber(token, out var address))
             {
-                if (!stream.TryNext(out var operand))
-                {
-                    Console.WriteLine($"asm {token} <operand> [addr]");
-                    return;
-                }
-
-                var operandAddress = stream.TryNextNumber(out var addr) ? addr : _cpu.Pc;
-                if (!_isa.TryAssemble(token, operand, out var opcodeWithOperand))
-                {
-                    Console.WriteLine($"unknown mnemonic {token} {operand}");
-                    return;
-                }
-
-                _memory.Write(operandAddress, opcodeWithOperand);
-                var operandLine = $"{token} {operand} -> {ToOctal(operandAddress)}";
-
-                Console.WriteLine(operandLine);
+                Console.WriteLine("asm <addr> <opcode> [operand]");
                 return;
             }
 
-            var simpleAddress = stream.TryNextNumber(out var addrSimple) ? addrSimple : _cpu.Pc;
-            if (!_isa.TryAssemble(token, out var opcode))
+            if (!stream.TryNext(out var mnemonic))
             {
-                Console.WriteLine($"unknown mnemonic {token}");
+                AssembleInteractive(address);
                 return;
             }
 
-            _memory.Write(simpleAddress, opcode);
-            var assembledLine = $"{token} -> {ToOctal(simpleAddress)}";
+            var operand = stream.TryNext(out var operandToken) ? operandToken : null;
+            if (stream.HasMore)
+            {
+                Console.WriteLine("asm <addr> <opcode> [operand]");
+                return;
+            }
 
-            Console.WriteLine(assembledLine);
+            if (!string.IsNullOrWhiteSpace(operand))
+            {
+                if (!_isa.TryAssemble(mnemonic, operand, out var opcodeWithOperand))
+                {
+                    if (IsOperandMnemonic(mnemonic) || _isa.TryAssemble(mnemonic, out _))
+                    {
+                        Console.WriteLine($"asm {mnemonic} {operand}: invalid operand");
+                        return;
+                    }
+
+                    Console.WriteLine($"unknown mnemonic {mnemonic}");
+                    return;
+                }
+
+                _memory.Write(address, opcodeWithOperand);
+                Console.WriteLine($"{ToOctal(address)}: {mnemonic} {operand}");
+                return;
+            }
+
+            if (IsOperandMnemonic(mnemonic))
+            {
+                Console.WriteLine($"asm {mnemonic}: requires an operand");
+                return;
+            }
+
+            if (!_isa.TryAssemble(mnemonic, out var opcode))
+            {
+                Console.WriteLine($"unknown mnemonic {mnemonic}");
+                return;
+            }
+
+            _memory.Write(address, opcode);
+            Console.WriteLine($"{ToOctal(address)}: {mnemonic}");
+        }
+
+        private void AssembleInteractive(int address)
+        {
+            Console.WriteLine("Interactive Assembler. Enter '$' to quit.");
+            var symbols = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            while (true)
+            {
+                Console.Write($"{ToOctal(address)}? ");
+                var line = Console.ReadLine();
+                if (line == null)
+                {
+                    break;
+                }
+
+                var trimmed = line.Trim();
+                if (trimmed == "$")
+                {
+                    break;
+                }
+
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+
+                if (!TryAssembleInteractiveLine(trimmed, address, symbols, out var opcode, out var error))
+                {
+                    Console.WriteLine($"asm: {error}");
+                    continue;
+                }
+
+                _memory.Write(address, opcode);
+                Console.WriteLine($"{ToOctal(address)}: {ToOctal(opcode)}");
+                address = (address + 1) & 0x7fff;
+            }
+        }
+
+        private bool TryAssembleInteractiveLine(
+            string line,
+            int address,
+            Dictionary<string, int> symbols,
+            out ushort opcode,
+            out string error)
+        {
+            opcode = 0;
+            error = string.Empty;
+
+            var trimmed = StripComment(line).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                error = "empty line";
+                return false;
+            }
+
+            var parts = trimmed.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                error = "empty line";
+                return false;
+            }
+
+            var mnemonic = parts[0];
+            var operand = parts.Length > 1 ? parts[1].Trim() : null;
+
+            if (mnemonic.EndsWith(",", StringComparison.Ordinal))
+            {
+                var firstMnemonic = mnemonic.TrimEnd(',');
+                if (string.IsNullOrWhiteSpace(operand))
+                {
+                    error = "missing second opcode";
+                    return false;
+                }
+
+                var secondParts = operand.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                if (secondParts.Length != 1)
+                {
+                    error = $"invalid packed opcodes '{trimmed}'";
+                    return false;
+                }
+
+                if (!_isa.TryAssemble(firstMnemonic, out var firstOpcode)
+                    || !_isa.TryAssemble(secondParts[0], out var secondOpcode))
+                {
+                    error = $"unknown mnemonic in '{trimmed}'";
+                    return false;
+                }
+
+                opcode = (ushort)((firstOpcode << 6) | secondOpcode);
+                return true;
+            }
+
+            if (operand != null)
+            {
+                if (!TryResolveOperand(mnemonic, operand, address, symbols, out var resolvedOperand, out var resolveError))
+                {
+                    error = resolveError;
+                    return false;
+                }
+
+                if (_isa.TryAssemble(mnemonic, resolvedOperand, out var opcodeWithOperand))
+                {
+                    opcode = opcodeWithOperand;
+                    return true;
+                }
+
+                if (IsOperandMnemonic(mnemonic))
+                {
+                    error = $"invalid operand '{operand}' for {mnemonic}";
+                    return false;
+                }
+            }
+            else if (IsOperandMnemonic(mnemonic))
+            {
+                error = $"{mnemonic} requires an operand";
+                return false;
+            }
+
+            if (_isa.TryAssemble(mnemonic, out var opcodeSimple))
+            {
+                opcode = opcodeSimple;
+                return true;
+            }
+
+            error = $"unknown mnemonic '{mnemonic}'";
+            return false;
         }
 
         private void AssembleFile(string path)
@@ -1280,7 +1406,9 @@ namespace Ashen
                 || mnemonic.Equals("DASL", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("DASR", StringComparison.OrdinalIgnoreCase)
                 || mnemonic.Equals("DLSL", StringComparison.OrdinalIgnoreCase)
-                || mnemonic.Equals("DLSR", StringComparison.OrdinalIgnoreCase);
+                || mnemonic.Equals("DLSR", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("INCM", StringComparison.OrdinalIgnoreCase)
+                || mnemonic.Equals("DECM", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsRelativeMnemonic(string mnemonic)

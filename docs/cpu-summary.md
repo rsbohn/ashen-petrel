@@ -11,7 +11,8 @@ Monitor (ash)
   │       │       ├─ Parse lines      │
   │       │       ├─ Resolve symbols  │
   │       │       └─ Write memory     │
-  │       ├─ asm <mnemonic> ──────────┘
+  │       ├─ asm <addr> <opcode> ─────┘
+  │       ├─ asm <addr> (interactive) ┘
   │       │   └─ Assemble()
   │       ├─ run/step/trace
   │       │   └─ Cpu.Run() / Cpu.Step()

@@ -105,6 +105,57 @@ public class Hp3000MonitorTests
         Assert.True(isa.TryAssemble("LDD", resolved, out _));
     }
 
+    [Fact]
+    public void AssembleCommand_ShouldAssembleWithAddressFirst()
+    {
+        var memory = new Hp3000Memory(0x8000);
+        var devices = new DeviceRegistry();
+        var ioBus = new Hp3000IoBus(devices);
+        var cpu = new Hp3000Cpu(memory, ioBus, devices);
+        var monitor = new Hp3000Monitor(cpu, memory, devices);
+        var isa = new Hp3000Isa();
+
+        ExecuteLine(monitor, "asm 10 LDI 3");
+
+        Assert.True(isa.TryAssemble("LDI", "3", out var ldi));
+        Assert.Equal(ldi, memory.Read(Convert.ToInt32("10", 8)));
+
+        ExecuteLine(monitor, "asm 12 NOP");
+
+        Assert.Equal(0x0000, memory.Read(Convert.ToInt32("12", 8)));
+    }
+
+    [Fact]
+    public void AssembleCommand_WithAddressOnly_ShouldEnterInteractiveAssembler()
+    {
+        var memory = new Hp3000Memory(0x8000);
+        var devices = new DeviceRegistry();
+        var ioBus = new Hp3000IoBus(devices);
+        var cpu = new Hp3000Cpu(memory, ioBus, devices);
+        var monitor = new Hp3000Monitor(cpu, memory, devices);
+
+        var input = new StringReader("DUP, INCA\n$\n");
+        var output = new StringWriter();
+        var originalIn = Console.In;
+        var originalOut = Console.Out;
+        Console.SetIn(input);
+        Console.SetOut(output);
+
+        try
+        {
+            ExecuteLine(monitor, "asm 200");
+        }
+        finally
+        {
+            Console.SetIn(originalIn);
+            Console.SetOut(originalOut);
+        }
+
+        Assert.Equal(0x095B, memory.Read(Convert.ToInt32("200", 8)));
+        Assert.Contains("000200? ", output.ToString());
+        Assert.Contains("000200: 004533", output.ToString());
+    }
+
     private static bool TryResolveOperand(
         string mnemonic,
         string operand,
@@ -123,6 +174,16 @@ public class Hp3000MonitorTests
         resolved = (string)args[4]!;
         error = (string)args[5]!;
         return result;
+    }
+
+    private static void ExecuteLine(Hp3000Monitor monitor, string line)
+    {
+        var method = typeof(Hp3000Monitor).GetMethod(
+            "ExecuteLine",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        method!.Invoke(monitor, new object?[] { line });
     }
 
     private static void AssembleFile(Hp3000Monitor monitor, string path)

@@ -120,6 +120,8 @@ Overflow/carry branches use separate short formats:
 | `DASR` | `0121NN` | Double arithmetic shift right by NN (optional ,X count add). |
 | `DLSL` | `0122NN` | Double logical shift left by NN (optional ,X count add). |
 | `DLSR` | `0123NN` | Double logical shift right by NN (optional ,X count add). |
+| `INCM` | `120VVV` | Increment memory at DB+disp (optional ,I/,X). |
+| `DECM` | `121VVV` | Decrement memory at DB+disp (optional ,I/,X). |
 
 Device codes: `0` = `tty`, `1` = `lpt` (processed), `2` = `lpt` (raw word).
 

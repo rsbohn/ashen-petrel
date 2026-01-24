@@ -1240,4 +1240,58 @@ public class Hp3000IsaTests
         Assert.Equal(0x0000, cpu.Rb);
         Assert.Equal(0x0600, cpu.Sta);
     }
+
+    [Fact]
+    public void TryAssemble_Incm_ShouldAssemble()
+    {
+        var isa = new Hp3000Isa();
+
+        Assert.True(isa.TryAssemble("INCM", "DB+100", out var opcode));
+
+        Assert.Equal(0xA040, opcode);
+    }
+
+    [Fact]
+    public void Disassemble_Decm_ShouldReturnMnemonic()
+    {
+        var isa = new Hp3000Isa();
+
+        var disassembly = isa.Disassemble(0xA240);
+
+        Assert.Equal("DECM DB+100", disassembly);
+    }
+
+    [Fact]
+    public void ExecuteIncm_ShouldIncrementMemoryAndSetCc()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Db = (ushort)Convert.ToInt32("100", 8);
+        cpu.WriteWord(Convert.ToInt32("140", 8), 1);
+        cpu.Sta = 0;
+
+        Assert.True(isa.TryAssemble("INCM", "DB+40", out var opcode));
+        isa.TryExecuteWord(opcode, cpu);
+
+        Assert.Equal(2, cpu.ReadWord(Convert.ToInt32("140", 8)));
+        Assert.Equal(0x0000, cpu.Sta & 0x0300);
+    }
+
+    [Fact]
+    public void ExecuteDecm_ShouldDecrementMemoryAndSetCcl()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Db = (ushort)Convert.ToInt32("100", 8);
+        cpu.WriteWord(Convert.ToInt32("140", 8), 0);
+        cpu.Sta = 0;
+
+        Assert.True(isa.TryAssemble("DECM", "DB+40", out var opcode));
+        isa.TryExecuteWord(opcode, cpu);
+
+        Assert.Equal(0xFFFF, cpu.ReadWord(Convert.ToInt32("140", 8)));
+        Assert.Equal(0x0100, cpu.Sta & 0x0300);
+    }
 }

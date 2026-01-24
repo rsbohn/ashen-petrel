@@ -64,6 +64,9 @@ namespace Ashen
         private const ushort StorXFlag = 0x0800;
         private const ushort StorIFlag = 0x0400;
         private const ushort StorDispMask = 0x01FF;
+        private const ushort IncmMask = 0xF200;
+        private const ushort IncmBase = 0xA000; // 120000 octal
+        private const ushort DecmBase = 0xA200; // 121000 octal
         private const ushort LddMask = 0xF200;
         private const ushort LddBase = 0xD200;
         private const ushort StdMask = 0xF200;
@@ -567,6 +570,18 @@ namespace Ashen
                 return true;
             }
 
+            if ((word & IncmMask) == IncmBase)
+            {
+                ExecuteMemAdjust(word, increment: true, cpu);
+                return true;
+            }
+
+            if ((word & IncmMask) == DecmBase)
+            {
+                ExecuteMemAdjust(word, increment: false, cpu);
+                return true;
+            }
+
             if (word == DdivWord)
             {
                 var a = cpu.Pop();
@@ -958,6 +973,16 @@ namespace Ashen
                 return $"DLSR {count}{suffix}";
             }
 
+            if ((opcode & IncmMask) == IncmBase)
+            {
+                return DisassembleMemRef(opcode, "INCM");
+            }
+
+            if ((opcode & IncmMask) == DecmBase)
+            {
+                return DisassembleMemRef(opcode, "DECM");
+            }
+
             if (opcode == HaltWord)
             {
                 return "HALT 0";
@@ -1128,6 +1153,16 @@ namespace Ashen
             if (mnemonic.Equals("DLSR", StringComparison.OrdinalIgnoreCase))
             {
                 return TryAssembleDlsr(operand, out opcode);
+            }
+
+            if (mnemonic.Equals("INCM", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleMemAdjust(operand, IncmBase, out opcode);
+            }
+
+            if (mnemonic.Equals("DECM", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryAssembleMemAdjust(operand, DecmBase, out opcode);
             }
 
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
@@ -1463,6 +1498,26 @@ namespace Ashen
             UpdateDoubleCcCarryFlags(cpu, result, carry);
         }
 
+        private static void ExecuteMemAdjust(ushort word, bool increment, Hp3000Cpu cpu)
+        {
+            var displacement = word & StorDispMask;
+            var target = (cpu.Db + displacement) & 0x7fff;
+            if ((word & StorXFlag) != 0)
+            {
+                target = (target + cpu.X) & 0x7fff;
+            }
+
+            if ((word & StorIFlag) != 0)
+            {
+                target = cpu.ReadWord(target) & 0x7fff;
+            }
+
+            var value = cpu.ReadWord(target);
+            value = increment ? (ushort)(value + 1) : (ushort)(value - 1);
+            cpu.WriteWord(target, value);
+            UpdateCcFlags(cpu, value);
+        }
+
         private static bool TryExecuteSpecial(ushort word, Hp3000Cpu cpu)
         {
             if ((word & 0xFC00) != 0x3000)
@@ -1637,6 +1692,24 @@ namespace Ashen
 
             var offsetText = Convert.ToString(displacement, 8);
             return $"STOR DB+{offsetText}{suffix}";
+        }
+
+        private static string DisassembleMemRef(ushort word, string mnemonic)
+        {
+            var displacement = (ushort)(word & StorDispMask);
+            var suffix = "";
+            if ((word & StorIFlag) != 0)
+            {
+                suffix += ",I";
+            }
+
+            if ((word & StorXFlag) != 0)
+            {
+                suffix += ",X";
+            }
+
+            var offsetText = Convert.ToString(displacement, 8);
+            return $"{mnemonic} DB+{offsetText}{suffix}";
         }
 
         private static string DisassembleLdd(ushort word)
@@ -2730,6 +2803,63 @@ namespace Ashen
                 if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
                 {
                     opcode |= DaslXFlag;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssembleMemAdjust(string operand, ushort baseOpcode, out ushort opcode)
+        {
+            opcode = 0;
+            if (string.IsNullOrWhiteSpace(operand))
+            {
+                return false;
+            }
+
+            var parts = operand.Trim().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return false;
+            }
+
+            var basePart = parts[0].Trim();
+            if (basePart.Length < 1)
+            {
+                return false;
+            }
+
+            var offsetText = basePart;
+            if (basePart.StartsWith("DB", StringComparison.OrdinalIgnoreCase))
+            {
+                if (basePart.Length < 4 || basePart[2] != '+')
+                {
+                    return false;
+                }
+
+                offsetText = basePart[3..];
+            }
+
+            if (!TryParseOctal(offsetText, out var offset) || offset > StorDispMask)
+            {
+                return false;
+            }
+
+            opcode = (ushort)(baseOpcode | offset);
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var suffix = parts[i].Trim();
+                if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= StorIFlag;
+                }
+                else if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                {
+                    opcode |= StorXFlag;
                 }
                 else
                 {
