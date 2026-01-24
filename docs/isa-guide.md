@@ -110,8 +110,8 @@ Overflow/carry branches use separate short formats:
 | `IABZ` | `0107KK` | Increment A; if zero then branch PC±disp (optional ,I). |
 | `IXBZ` | `0112KK` | Increment X; if zero then branch PC±disp (optional ,I). |
 | `DXBZ` | `0113KK` | Decrement X; if zero then branch PC±disp (optional ,I). |
-| `SCAL` | `0304XX` | System call. Operand selects entry/label. |
-| `SXIT` | `0320XX` | Exit system call. Pops return address, discards locals. |
+| `SCAL` | `0304XX` | System call. `SCAL 0` uses TOS as a label (PB-relative target), replaces TOS with return address, and jumps. `SCAL n` (n>0) reads entry at `PL-n`, pushes return address, and jumps to PB+entry. |
+| `SXIT` | `0320XX` | Exit system call. Pops return address, then pops N locals (operand), and jumps to the return address. |
 | `ASL` | `0100NN` | Arithmetic shift left TOS by NN, preserve sign bit. |
 | `ASR` | `0101NN` | Arithmetic shift right TOS by NN, preserve sign bit. |
 | `LSL` | `0102NN` | Logical shift left TOS by NN. |
