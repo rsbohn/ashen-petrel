@@ -105,8 +105,8 @@ Overflow/carry branches use separate short formats:
 | `STD` | `161076` | Store double at DB+disp, store TOS+1 then TOS. |
 | `DDIV` | `020571` | Double divide: (D,C)/(B,A) → quotient (D,C), remainder (B,A). |
 | `HALT` | `030360` | Halt execution. |
-| `WIO` | `0302KK` | Write I/O; K (4-bit device code), uses TOS word. |
-| `RIO` | `0301KK` | Read I/O; K (4-bit device code), pushes low byte. |
+| `WIO` | `0302KK` | Write I/O; K (4-bit device code). If ready (status bit 0x0002), pops TOS and writes it (CC=E). If not ready, pushes status word and does not pop TOS (CC=G). If status read fails, no stack effect (CC=L). |
+| `RIO` | `0301KK` | Read I/O; K (4-bit device code). If ready (status bit 0x0002), pushes read byte (CC=E). If not ready, pushes status word (CC=G). If status read fails, no stack effect (CC=L). |
 | `IABZ` | `0107KK` | Increment A; if zero then branch PC±disp (optional ,I). |
 | `IXBZ` | `0112KK` | Increment X; if zero then branch PC±disp (optional ,I). |
 | `DXBZ` | `0113KK` | Decrement X; if zero then branch PC±disp (optional ,I). |
