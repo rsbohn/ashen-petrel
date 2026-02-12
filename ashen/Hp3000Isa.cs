@@ -14,6 +14,7 @@ namespace Ashen
         private const ushort BranchOffsetMask = 0x00FF;
         private const ushort LoadMask = 0xF000;
         private const ushort LoadBase = 0x4000;
+        private const ushort LoadDbFlag = 0x0200;
         private const ushort LoadXFlag = 0x0800;
         private const ushort LoadIFlag = 0x0400;
         private const ushort LoadDispMask = 0x01FF;
@@ -328,6 +329,18 @@ namespace Ashen
                     {
                         var a = cpu.Pop();
                         cpu.Push((ushort)(0 - a));
+                        return true;
+                    }
+                case 0x000E: // DXCH
+                    {
+                        var a = cpu.Pop();
+                        var b = cpu.Pop();
+                        var c = cpu.Pop();
+                        var d = cpu.Pop();
+                        cpu.Push(b);
+                        cpu.Push(a);
+                        cpu.Push(d);
+                        cpu.Push(c);
                         return true;
                     }
                 case 0x0015: // TEST
@@ -881,14 +894,24 @@ namespace Ashen
 
             if ((word & LoadMask) == LoadBase)
             {
-                var displacement = word & LoadDispValueMask;
-                if ((word & LoadDispSign) != 0)
+                int loadTarget;
+                if ((word & LoadDbFlag) != 0)
                 {
-                    displacement = (ushort)(-displacement);
+                    var displacement = word & LoadDispMask;
+                    loadTarget = (cpu.Db + displacement) & 0x7fff;
+                }
+                else
+                {
+                    var displacement = word & LoadDispValueMask;
+                    if ((word & LoadDispSign) != 0)
+                    {
+                        displacement = (ushort)(-displacement);
+                    }
+
+                    var loadInstructionAddress = (cpu.Pc - 1) & 0x7fff;
+                    loadTarget = (loadInstructionAddress + displacement) & 0x7fff;
                 }
 
-                var loadInstructionAddress = (cpu.Pc - 1) & 0x7fff;
-                var loadTarget = (loadInstructionAddress + displacement) & 0x7fff;
                 if ((word & LoadXFlag) != 0)
                 {
                     loadTarget = (loadTarget + cpu.X) & 0x7fff;
@@ -1654,13 +1677,6 @@ namespace Ashen
 
         private static string DisassembleLoad(ushort word)
         {
-            var displacement = (ushort)(word & LoadDispValueMask);
-            var direction = '+';
-            if ((word & LoadDispSign) != 0)
-            {
-                direction = '-';
-            }
-
             var suffix = "";
             if ((word & LoadIFlag) != 0)
             {
@@ -1670,6 +1686,20 @@ namespace Ashen
             if ((word & LoadXFlag) != 0)
             {
                 suffix += ",X";
+            }
+
+            if ((word & LoadDbFlag) != 0)
+            {
+                var dbDisplacement = (ushort)(word & LoadDispMask);
+                var dbOffsetText = Convert.ToString(dbDisplacement, 8);
+                return $"LOAD DB+{dbOffsetText}{suffix}";
+            }
+
+            var displacement = (ushort)(word & LoadDispValueMask);
+            var direction = '+';
+            if ((word & LoadDispSign) != 0)
+            {
+                direction = '-';
             }
 
             var offsetText = Convert.ToString(displacement, 8);
@@ -1906,6 +1936,40 @@ namespace Ashen
             if (basePart.Length < 1)
             {
                 return false;
+            }
+
+            if (basePart.StartsWith("DB", StringComparison.OrdinalIgnoreCase))
+            {
+                if (basePart.Length < 4 || basePart[2] != '+')
+                {
+                    return false;
+                }
+
+                var dbOffsetText = basePart[3..];
+                if (!TryParseOctal(dbOffsetText, out var dbOffset) || dbOffset > LoadDispMask)
+                {
+                    return false;
+                }
+
+                opcode = (ushort)(LoadBase | LoadDbFlag | dbOffset);
+                for (var i = 1; i < parts.Length; i++)
+                {
+                    var suffix = parts[i].Trim();
+                    if (suffix.Equals("I", StringComparison.OrdinalIgnoreCase))
+                    {
+                        opcode |= LoadIFlag;
+                    }
+                    else if (suffix.Equals("X", StringComparison.OrdinalIgnoreCase))
+                    {
+                        opcode |= LoadXFlag;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
 
             if (!TryParsePcRelative(basePart, requirePrefix: false, out var direction, out var offsetText))

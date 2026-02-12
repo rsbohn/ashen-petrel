@@ -106,6 +106,21 @@ public class Hp3000MonitorTests
     }
 
     [Fact]
+    public void TryResolveOperand_Load_DbPlusLiteral_ShouldResolve()
+    {
+        var symbols = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        var ok = TryResolveOperand("LOAD", "DB+36", 0x0200, symbols, out var resolved, out var error);
+
+        Assert.True(ok, error);
+        Assert.Equal("DB+36", resolved);
+
+        var isa = new Hp3000Isa();
+        Assert.True(isa.TryAssemble("LOAD", resolved, out var opcode));
+        Assert.Equal(Convert.ToUInt16("041036", 8), opcode);
+    }
+
+    [Fact]
     public void AssembleCommand_ShouldAssembleWithAddressFirst()
     {
         var memory = new Hp3000Memory(0x8000);

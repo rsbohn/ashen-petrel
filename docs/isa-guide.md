@@ -100,6 +100,7 @@ Overflow/carry branches use separate short formats:
 | `LDI` | `021377` | Load immediate (8-bit) onto stack. |
 | `LDXI` | `021777` | Load immediate (8-bit) into X. |
 | `LOAD` | `040007` | Load word at P±disp (optional ,I/,X) onto stack. |
+| `LOAD` | `041007` | Load word at DB+disp (optional ,I/,X) onto stack. |
 | `STOR` | `051000` | Store TOS at DB+disp (optional ,I/,X). |
 | `LDD` | `151076` | Load double at DB+disp, push *DB+disp then *DB+disp+1. |
 | `STD` | `161076` | Store double at DB+disp, store TOS+1 then TOS. |
@@ -161,7 +162,7 @@ Ashen currently models `P`, `DB`, `X`, and `STA`, plus the register stack
 | 013 | MPYL | - | 053 | FMPY | - |
 | 014 | **DIVL** | ✓ | 054 | FDIV | - |
 | 015 | DNEG | - | 055 | FNEG | - |
-| 016 | DXCH | - | 056 | CAB | - |
+| 016 | **DXCH** | ✓ | 056 | CAB | - |
 | 017 | CMP | - | 057 | LCMP | - |
 | 020 | **ADD** | ✓ | 060 | LADD | - |
 | 021 | **SUB** | ✓ | 061 | LSUB | - |

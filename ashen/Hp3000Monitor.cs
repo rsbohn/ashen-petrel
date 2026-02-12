@@ -1094,6 +1094,17 @@ namespace Ashen
 
             if (mnemonic.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
             {
+                if (basePart.StartsWith("DB+", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!TryResolveBase(basePart, address, symbols, out var loadDbBase, out error))
+                    {
+                        return false;
+                    }
+
+                    resolved = loadDbBase + suffix;
+                    return true;
+                }
+
                 if (!TryResolveRelativeBase(basePart, address, symbols, out var loadBase, out error))
                 {
                     return false;

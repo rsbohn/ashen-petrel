@@ -468,6 +468,25 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void Dxch_ShouldExchangeTopTwoDoublewords()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+
+        cpu.Push(1);
+        cpu.Push(2);
+        cpu.Push(3);
+        cpu.Push(4);
+        isa.TryExecute(0x000E, cpu);
+
+        Assert.Equal(4, cpu.Sr);
+        Assert.Equal(2, cpu.Ra);
+        Assert.Equal(1, cpu.Rb);
+        Assert.Equal(4, cpu.Rc);
+        Assert.Equal(3, cpu.Rd);
+    }
+
+    [Fact]
     public void Inca_ShouldIncrementTopOfStack()
     {
         var cpu = CreateCpu();
@@ -867,6 +886,26 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void TryAssemble_Load_DbRelative_ShouldUse041Prefix()
+    {
+        var isa = new Hp3000Isa();
+
+        Assert.True(isa.TryAssemble("LOAD", "DB+36", out var opcode));
+
+        Assert.Equal(Convert.ToUInt16("041036", 8), opcode);
+    }
+
+    [Fact]
+    public void Disassemble_Load_DbRelative_ShouldReturnDbOperand()
+    {
+        var isa = new Hp3000Isa();
+
+        var disassembly = isa.Disassemble(Convert.ToUInt16("041036", 8));
+
+        Assert.Equal("LOAD DB+36", disassembly);
+    }
+
+    [Fact]
     public void Disassemble_Bro_ShouldReturnMnemonic()
     {
         var isa = new Hp3000Isa();
@@ -965,6 +1004,22 @@ public class Hp3000IsaTests
         Assert.Equal(101, cpu.Pc);
         Assert.Equal(0, cpu.Sr);
         Assert.Equal(0x0400, cpu.Sta);
+    }
+
+    [Fact]
+    public void TryExecuteWord_Load_DbRelative_ShouldReadFromDbDisplacement()
+    {
+        var cpu = CreateCpu();
+        var isa = new Hp3000Isa();
+        cpu.Db = (ushort)Convert.ToInt32("100", 8);
+        cpu.WriteWord(Convert.ToInt32("136", 8), 0x55AA);
+        cpu.Pc = 1;
+
+        var result = isa.TryExecuteWord(Convert.ToUInt16("041036", 8), cpu);
+
+        Assert.True(result);
+        Assert.Equal(1, cpu.Sr);
+        Assert.Equal(0x55AA, cpu.Ra);
     }
 
     [Fact]
