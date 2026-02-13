@@ -146,6 +146,7 @@ namespace Ashen
             Console.WriteLine("Watch: watch unwatch watches");
             Console.WriteLine("Numbers are octal; use # for decimal.");
             Console.WriteLine("Assembler: asm <addr> <opcode> [operand] | asm <file> | asm <addr> | &asm | syms");
+            Console.WriteLine("CPU: go <addr|symbol> [steps]");
             Console.WriteLine("Memory: txt <addr> /text/ (writes ASCII bytes + 0 terminator)");
         }
 
@@ -310,9 +311,15 @@ namespace Ashen
 
         private void Go(TokenStream stream)
         {
-            if (!stream.TryNextNumber(out var address))
+            if (!stream.TryNext(out var targetToken))
             {
-                Console.WriteLine("go <addr> [steps]");
+                Console.WriteLine("go <addr|symbol> [steps]");
+                return;
+            }
+
+            if (!TryResolveAddressToken(targetToken, out var address))
+            {
+                Console.WriteLine($"go: unknown address or symbol '{targetToken}'");
                 return;
             }
 
@@ -321,6 +328,24 @@ namespace Ashen
             var ran = _cpu.Run(steps);
             Console.WriteLine($"\nran {ToOctalCount(ran)} steps");
             ReportHaltReason();
+        }
+
+        private bool TryResolveAddressToken(string token, out int address)
+        {
+            if (TryParseNumber(token, out address))
+            {
+                address &= 0x7fff;
+                return true;
+            }
+
+            if (_lastSymbols != null && _lastSymbols.TryGetValue(token, out address))
+            {
+                address &= 0x7fff;
+                return true;
+            }
+
+            address = 0;
+            return false;
         }
 
         private void RunCpu(TokenStream stream)
