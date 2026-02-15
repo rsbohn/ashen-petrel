@@ -1,0 +1,55 @@
+020000  ORG 20000
+
+START:
+020000 030360      HALT
+; use 'rho' for the return address
+; stack diagrams include the return address
+; TOS on the right
+ROT:                ; (a b c rho -- b c a rho)
+020001 051400      STOR DB+400
+020002 051401      STOR DB+401
+020003 000032      XCH
+020004 041401      LOAD DB+401
+020005 000032      XCH
+020006 041400      LOAD DB+400
+020007 032000      SXIT 0
+
+OVER:               ; (a b rho -- a b a rho)
+020010 051402      STOR DB+402
+020011 000032      XCH             ; (b a)
+020012 000045      DUP             ; (b a a)
+020013 051403      STOR DB+403     ; (b a)
+020014 000032      XCH             ; (a b)
+020015 041403      LOAD DB+403     ; (a b a)
+020016 041402      LOAD DB+402     ; (a b a rho)
+020017 032000      SXIT 0
+
+021000  ORG 21000
+021000 020001      DW ROT
+TSTROT:
+021001 021030      LDI 30
+021002 021031      LDI 31
+021003 021032      LDI 32
+021004 040404      LOAD .-4
+021005 030400      SCAL 000    ;given  (30 31 32)
+021006 030360      HALT 0      ;expect (31 32 30)
+
+021007 020010      DW OVER
+TSTOVER:
+021010 021010      LDI 10
+021011 021011      LDI 11
+021012 040403      LOAD .-3
+021013 030400      SCAL 000    ;given  (10 11)
+021014 030360      HALT 0      ;expect (10 11 10)
+
+; should be AORG...
+077770  ORG 77770       ; SCAL N (1=77777, 2=77776)
+077770 000000      DW 0
+077771 000000      DW 0
+077772 000000      DW 0
+077773 000000      DW 0
+
+077774 000000      DW 0
+077775 000000      DW 0
+077776 020010      DW OVER
+077777 020001      DW ROT
