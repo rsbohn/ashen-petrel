@@ -748,8 +748,8 @@ def try_assemble_sxit(operand: str) -> Optional[int]:
 
 
 def try_assemble_shift(operand: str, base_opcode: int) -> Optional[int]:
-    value = try_parse_octal(operand)
-    if value is None or value > SHIFT_COUNT_MASK:
+    value = try_parse_number(operand)
+    if value is None or value < 0 or value > SHIFT_COUNT_MASK:
         return None
     return base_opcode | value
 
@@ -760,8 +760,8 @@ def try_assemble_dasl(operand: str, base_opcode: int) -> Optional[int]:
     parts = [part for part in operand.strip().split(",") if part.strip()]
     if not parts:
         return None
-    value = try_parse_octal(parts[0].strip())
-    if value is None or value > SHIFT_COUNT_MASK:
+    value = try_parse_number(parts[0].strip())
+    if value is None or value < 0 or value > SHIFT_COUNT_MASK:
         return None
     opcode = base_opcode | value
     for suffix in parts[1:]:

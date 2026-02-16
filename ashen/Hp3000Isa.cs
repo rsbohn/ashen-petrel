@@ -2699,7 +2699,7 @@ namespace Ashen
         private static bool TryAssembleShift(string operand, ushort baseOpcode, out ushort opcode)
         {
             opcode = 0;
-            if (!TryParseOctal(operand, out var value))
+            if (!TryParseNumber(operand, out var value))
             {
                 return false;
             }
@@ -2727,7 +2727,7 @@ namespace Ashen
                 return false;
             }
 
-            if (!TryParseOctal(parts[0].Trim(), out var value))
+            if (!TryParseNumber(parts[0].Trim(), out var value))
             {
                 return false;
             }
@@ -2768,7 +2768,7 @@ namespace Ashen
                 return false;
             }
 
-            if (!TryParseOctal(parts[0].Trim(), out var value))
+            if (!TryParseNumber(parts[0].Trim(), out var value))
             {
                 return false;
             }
@@ -2809,7 +2809,7 @@ namespace Ashen
                 return false;
             }
 
-            if (!TryParseOctal(parts[0].Trim(), out var value))
+            if (!TryParseNumber(parts[0].Trim(), out var value))
             {
                 return false;
             }
@@ -2850,7 +2850,7 @@ namespace Ashen
                 return false;
             }
 
-            if (!TryParseOctal(parts[0].Trim(), out var value))
+            if (!TryParseNumber(parts[0].Trim(), out var value))
             {
                 return false;
             }
@@ -2938,6 +2938,32 @@ namespace Ashen
         {
             try
             {
+                value = Convert.ToUInt16(token, 8);
+                return true;
+            }
+            catch (Exception)
+            {
+                value = 0;
+                return false;
+            }
+        }
+
+        private static bool TryParseNumber(string token, out ushort value)
+        {
+            try
+            {
+                if (token.StartsWith("#", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = Convert.ToUInt16(token[1..], 10);
+                    return true;
+                }
+
+                if (token.StartsWith("$", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = Convert.ToUInt16(token[1..], 16);
+                    return true;
+                }
+
                 value = Convert.ToUInt16(token, 8);
                 return true;
             }

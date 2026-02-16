@@ -1253,6 +1253,16 @@ public class Hp3000IsaTests
     }
 
     [Fact]
+    public void TryAssemble_Lsr_WithDecimalCount_ShouldAssemble()
+    {
+        var isa = new Hp3000Isa();
+
+        Assert.True(isa.TryAssemble("LSR", "#15", out var opcode));
+
+        Assert.Equal(0x10CF, opcode);
+    }
+
+    [Fact]
     public void Disassemble_Dlsr_WithX_ShouldReturnMnemonic()
     {
         var isa = new Hp3000Isa();
